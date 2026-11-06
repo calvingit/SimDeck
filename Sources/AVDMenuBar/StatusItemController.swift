@@ -18,6 +18,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private var isPinned = UserDefaults.standard.bool(forKey: "panelPinned")
     private var cancellables = Set<AnyCancellable>()
     private var escapeMonitor: Any?
+    private var localClickMonitor: Any?
+    private var globalClickMonitor: Any?
 
     private static let popoverSize = NSSize(width: 390, height: 420)
 
@@ -80,6 +82,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if let event = NSApp.currentEvent,
            event.type == .rightMouseUp ||
            (event.type == .leftMouseUp && event.modifierFlags.contains(.control)) {
+            closePanel()
             let bounds = button.bounds
             let anchor = NSPoint(x: bounds.minX, y: button.isFlipped ? bounds.maxY : bounds.minY)
             contextMenu.popUp(positioning: nil, at: anchor, in: button)
@@ -98,6 +101,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         guard !popover.isShown, let button = statusItem.button else { return }
 
         popover.behavior = isPinned ? .applicationDefined : .transient
+        // 菜单栏应用默认不是 active 应用。先激活，popover 窗口才能成为 key window，
+        // 系统才会按 .transient 语义在点击外部时关闭面板。
+        NSApp.activate()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         button.highlight(true)
         startMonitors()
@@ -129,6 +135,23 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 return event
             }
         }
+
+        if localClickMonitor == nil {
+            localClickMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown]
+            ) { [weak self] event in
+                self?.handleLocalClick(event)
+                return event
+            }
+        }
+
+        if globalClickMonitor == nil {
+            globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown]
+            ) { [weak self] _ in
+                self?.closePanelIfUnpinned()
+            }
+        }
     }
 
     private func stopMonitors() {
@@ -136,6 +159,38 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             NSEvent.removeMonitor(escapeMonitor)
             self.escapeMonitor = nil
         }
+        if let localClickMonitor {
+            NSEvent.removeMonitor(localClickMonitor)
+            self.localClickMonitor = nil
+        }
+        if let globalClickMonitor {
+            NSEvent.removeMonitor(globalClickMonitor)
+            self.globalClickMonitor = nil
+        }
+    }
+
+    /// 点击本应用的其他窗口（主窗口、设置窗口、对话框）时关闭面板。
+    /// 面板内部和状态栏按钮上的点击排除在外。
+    private func handleLocalClick(_ event: NSEvent) {
+        guard !isPinned, popover.isShown else { return }
+        if let panelWindow = popover.contentViewController?.view.window,
+           event.window === panelWindow {
+            return
+        }
+        if let button = statusItem.button, event.window === button.window {
+            let point = button.convert(event.locationInWindow, from: nil)
+            if button.bounds.contains(point) {
+                return
+            }
+        }
+        closePanel()
+    }
+
+    /// 点击其他应用或桌面时关闭面板。全局监听收不到本应用的事件，
+    /// 本应用内的点击由 `handleLocalClick` 处理。
+    private func closePanelIfUnpinned() {
+        guard !isPinned, popover.isShown else { return }
+        closePanel()
     }
 
     private func updateBadge() {
