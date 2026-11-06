@@ -1,10 +1,10 @@
-# 贡献指南
+# Contributing
 
-欢迎报告问题、改进文档或提交代码。若要改变设备操作、数据安全或系统权限相关行为，请先和维护者确认预期。
+Bug reports, documentation improvements, and code contributions are welcome. Discuss the expected behavior with the maintainers before changing device operations, data safety, or system permissions.
 
-## 本地开发
+## Local development
 
-需要 macOS 14 或更新版本，以及支持 Swift 5.9 或更新版本的 Xcode 工具链。构建和模拟工具测试不需要 Android SDK；运行应用的 AVD 功能时，请按 [README](README.md#环境要求) 准备 SDK。
+Use macOS 14 or later and an Xcode toolchain with Swift 5.9 or later. Building the app and running tests with mock tools do not require the Android SDK. To manage actual AVDs, follow the [requirements](README.md#requirements).
 
 ```bash
 swift build
@@ -12,16 +12,16 @@ swift test --skip IntegrationTests
 AVD_MOCK_E2E=1 swift test --skip IntegrationTests
 ```
 
-涉及菜单栏、预览、设置或资源打包时，用 `./scripts/build-app.sh` 生成应用，并在 macOS 上手动验证相关操作。若改了文案，至少检查简体中文和英文，确认长文案未被截断、占位符值显示正确。
+For changes to the menu bar, preview, settings, or bundled resources, run `./scripts/build-app.sh` and verify the affected behavior in the macOS app. For text changes, check English and Simplified Chinese for clipping and correct placeholder substitution.
 
-真实 SDK 和设备测试请单独运行。H.264 测试会在检测到的设备上启动短时录屏，建议只连接专用测试设备：
+Run real SDK and device tests separately. The H.264 tests can briefly record the screen of a detected device, so connect only a dedicated test device:
 
 ```bash
 AVD_INTEGRATION=1 swift test --filter IntegrationTests
 ```
 
-## 报告问题与提交改动
+## Reporting issues and submitting changes
 
-- 报告问题时，提供应用版本或构建来源、macOS 版本、设备类型、复现步骤，以及预期和实际行为。仅附相关日志片段，先去掉设备序列号、用户名、本机路径和其他敏感信息。
-- 提交改动时，说明解决的问题、用户可见变化、验证命令和未覆盖的场景。涉及启动、关机、快照或清除数据时，明确列出行为变化。
-- 安全问题按 [SECURITY.md](SECURITY.md) 私下报告。
+- Include the app version or build source, macOS version, device type, reproduction steps, and expected and actual behavior. Share only relevant log excerpts, with serial numbers, usernames, local paths, and other sensitive data removed.
+- In a pull request, explain the problem, what users will see, how you verified the change, and what remains untested. Call out changes to startup, shutdown, snapshots, or data wiping.
+- Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).

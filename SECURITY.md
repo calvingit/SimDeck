@@ -1,7 +1,7 @@
-# 安全问题报告
+# Reporting security issues
 
-如果发现可能导致非预期命令执行、文件访问、权限绕过或设备数据丢失的问题，请通过托管平台的私密漏洞报告入口联系维护者；若项目没有开启该入口，请通过你已有的私下渠道联系维护者。公开讨论中不要贴复现载荷、凭据或可识别的设备数据。
+Report suspected vulnerabilities privately through the repository's security reporting feature, if available. Otherwise, contact a maintainer through an existing private channel. Examples include unintended command execution, unauthorized file access, permission bypasses, and unexpected loss of device data. Keep exploit payloads, credentials, and identifying device data out of public discussions.
 
-请提供受影响的版本或构建来源、macOS 版本、触发条件、预期与实际行为，以及脱敏的复现步骤或日志。无需在真实数据上重现删除或清除操作。
+Include the affected version or build, macOS version, conditions that trigger the problem, expected and actual behavior, and redacted reproduction steps or logs. There is no need to reproduce destructive behavior against real data.
 
-涉及 Android SDK、ADB 或模拟器本身的问题，若能在 AVD MenuBar 之外复现，也请在报告中注明，便于判断归属。
+If the issue also occurs when using the Android SDK, ADB, or the emulator outside AVD MenuBar, mention that in the report so maintainers can determine where it belongs.

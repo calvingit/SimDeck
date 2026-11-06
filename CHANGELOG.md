@@ -1,8 +1,13 @@
-# 变更记录
+# Changelog
 
-## 未发布
+## Unreleased
 
-- 设置新增跟随系统、简体中文和英文选项，重开应用后生效。
-- 模拟器预览增加四周留白，并使用随浅色／深色主题变化的底板。
-- 调整状态栏图标的点击处理：左键打开设备面板，右键或 Control＋点击打开退出菜单。
-- 补充开发约定、贡献指南和安全问题报告说明。
+- Added English and Simplified Chinese project documentation, with demos in both languages.
+- Added GitHub Actions packaging and automatic GitHub Releases for pushed tags, with an Apple Silicon DMG installer.
+
+## 1.0
+
+- Added System, Simplified Chinese, and English language options. Changes take effect after reopening the app.
+- Added space around the emulator preview and a background that adapts to light and dark appearance.
+- Left-click the menu bar icon to open the device panel. Right-click or Control-click to open the Quit menu.
+- Added development guidelines, a contribution guide, and a security reporting policy.
