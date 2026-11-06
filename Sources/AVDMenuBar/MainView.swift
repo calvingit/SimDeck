@@ -1,0 +1,431 @@
+import SwiftUI
+import AVDCore
+
+struct MainView: View {
+    @ObservedObject var model: AppModel
+    let actions: PanelActions
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var touchStartDate: Date?
+
+    private var selected: DeviceEntry? {
+        let entries = model.deviceEntries
+        return entries.first { $0.id == model.selectedDeviceID }
+            ?? entries.first { $0.status == .running }
+            ?? entries.first { $0.status == .starting }
+            ?? entries.first
+    }
+
+    private var selectedRunning: RunningEmulator? { selected?.device }
+    private var previewSerial: String? { selectedRunning?.serial }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            leftList.frame(width: 224)
+            Divider()
+            VStack(spacing: 0) {
+                if let entry = selected {
+                    workspaceHeader(entry)
+                    Divider()
+                }
+                previewArea
+                    .padding(14)
+                Divider()
+                bottomBar
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(minWidth: 740, minHeight: 480)
+        .onAppear {
+            updatePreview()
+            model.setPreviewVisible(true)
+        }
+        .onDisappear { model.setPreviewVisible(false) }
+        .onChange(of: selected?.id) { _, _ in updatePreview() }
+        .onChange(of: selectedRunning) { _, _ in updatePreview() }
+    }
+
+    private func updatePreview() {
+        touchStartDate = nil
+        model.setPreviewTarget(
+            serial: previewSerial,
+            avdName: selected?.avd?.name ?? selectedRunning?.avdName,
+            booted: selectedRunning?.isBooted == true,
+            isRealDevice: selectedRunning?.isRealDevice == true
+        )
+    }
+
+    private var leftList: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(AppLanguage.text("field.device")).font(.headline)
+                Spacer()
+                Text(model.deviceEntries.count.formatted())
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            Divider()
+            if model.deviceEntries.isEmpty {
+                Text(model.isRefreshing ? AppLanguage.text("device.loading") : AppLanguage.text("device.empty"))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(selection: Binding(
+                    get: { selected?.id },
+                    set: { model.selectedDeviceID = $0 }
+                )) {
+                    DeviceGroups(entries: model.deviceEntries) { entry in
+                        DeviceIdentity(entry: entry)
+                            .padding(.vertical, 3)
+                            .tag(entry.id)
+                    }
+                }
+                .listStyle(.sidebar)
+            }
+        }
+    }
+
+    private var previewArea: some View {
+        GeometryReader { geo in
+            let fitRect = displayedFrameSize.map { aspectFitRect(contentSize: $0, container: geo.size) }
+            ZStack {
+                if let fitRect {
+                    Group {
+                        if let cgImage = model.previewFrame {
+                            Image(decorative: cgImage, scale: 1.0)
+                                .resizable()
+                        } else if let nsImage = model.previewImage {
+                            Image(nsImage: nsImage)
+                                .resizable()
+                        }
+                    }
+                    .frame(width: fitRect.width, height: fitRect.height)
+                    .position(x: fitRect.midX, y: fitRect.midY)
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "desktopcomputer")
+                            .font(.system(size: 30))
+                            .foregroundStyle(.secondary)
+                        Text(previewMessage)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if fitRect != nil && previewSerial != nil {
+                    let badge = pipelineBadge
+                    VStack {
+                        HStack {
+                            Label(badge.text, systemImage: "dot.radiowave.left.and.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .foregroundStyle(badge.color)
+                                .background(.regularMaterial, in: Capsule())
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
+                    .allowsHitTesting(false)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .background(Color(white: colorScheme == .dark ? 0.16 : 0.86), in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if touchStartDate == nil {
+                            touchStartDate = Date()
+                        }
+                    }
+                    .onEnded { value in
+                        defer { touchStartDate = nil }
+                        guard let fitRect else { return }
+                        let elapsedMs = max(
+                            100,
+                            Int(Date().timeIntervalSince(touchStartDate ?? value.time) * 1000)
+                        )
+                        handleTouch(value: value, elapsedMs: elapsedMs, fitRect: fitRect)
+                    }
+            )
+        }
+    }
+
+    private var pipelineBadge: (text: String, color: Color) {
+        switch model.previewPipeline {
+        case .adbStream: return (AppLanguage.text("preview.liveBadge"), .green)
+        case .polling: return (AppLanguage.text("preview.pollingBadge"), .orange)
+        }
+    }
+
+    private var displayedFrameSize: CGSize? {
+        if let frame = model.previewFrame {
+            return CGSize(width: frame.width, height: frame.height)
+        }
+        if let image = model.previewImage {
+            return image.size
+        }
+        return nil
+    }
+
+    private func aspectFitRect(contentSize: CGSize, container: CGSize) -> CGRect {
+        let inset: CGFloat = 12
+        let availableWidth = max(0, container.width - inset * 2)
+        let availableHeight = max(0, container.height - inset * 2)
+        guard contentSize.width > 0, contentSize.height > 0,
+              availableWidth > 0, availableHeight > 0 else { return .zero }
+        let scale = min(availableWidth / contentSize.width, availableHeight / contentSize.height)
+        let width = contentSize.width * scale
+        let height = contentSize.height * scale
+        return CGRect(
+            x: (container.width - width) / 2,
+            y: (container.height - height) / 2,
+            width: width,
+            height: height
+        )
+    }
+
+    /// 把预览上的点击/拖拽位置映射为设备分辨率坐标。
+    /// 捕获帧包含模拟器窗口标题栏：按帧宽高比与设备分辨率宽高比之差，
+    /// 推算顶部标题栏高度并裁掉。
+    private func mappedPoint(
+        _ point: CGPoint,
+        fitRect: CGRect,
+        frame: CGSize,
+        resolution: CGSize
+    ) -> CGPoint? {
+        guard frame.width > 0, frame.height > 0,
+              fitRect.width > 0, fitRect.height > 0 else { return nil }
+
+        let imageX = (point.x - fitRect.minX) / fitRect.width * frame.width
+        let imageY = (point.y - fitRect.minY) / fitRect.height * frame.height
+        guard imageX >= 0, imageY >= 0, imageX <= frame.width, imageY <= frame.height else {
+            return nil
+        }
+
+        let contentHeight = frame.width * resolution.height / resolution.width
+        let extraHeight = max(0, frame.height - contentHeight)
+        guard imageY >= extraHeight else { return nil }
+
+        let x = imageX / frame.width * resolution.width
+        let y = (imageY - extraHeight) / contentHeight * resolution.height
+        guard x >= 0, y >= 0, x <= resolution.width, y <= resolution.height else {
+            return nil
+        }
+        return CGPoint(x: x, y: y)
+    }
+
+    private func handleTouch(value: DragGesture.Value, elapsedMs: Int, fitRect: CGRect) {
+        guard let running = selectedRunning, running.isBooted,
+              let frameSize = displayedFrameSize,
+              let resolution = model.deviceResolution else {
+            return
+        }
+        guard let start = mappedPoint(
+            value.startLocation,
+            fitRect: fitRect,
+            frame: frameSize,
+            resolution: resolution
+        ), let end = mappedPoint(
+            value.location,
+            fitRect: fitRect,
+            frame: frameSize,
+            resolution: resolution
+        ) else {
+            return
+        }
+
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let distance = sqrt(dx * dx + dy * dy)
+
+        if distance < Double(resolution.width) * 0.01 {
+            if elapsedMs >= 500 {
+                // 长按：原地 swipe 带时长
+                actions.sendSwipe(
+                    running,
+                    Int(start.x), Int(start.y),
+                    Int(start.x), Int(start.y),
+                    800
+                )
+            } else {
+                actions.sendTap(running, Int(end.x), Int(end.y))
+            }
+        } else {
+            actions.sendSwipe(
+                running,
+                Int(start.x), Int(start.y),
+                Int(end.x), Int(end.y),
+                elapsedMs
+            )
+        }
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 14) {
+            keyButton(AppLanguage.text("key.back"), icon: "arrow.uturn.backward", code: 4)
+            keyButton(AppLanguage.text("key.home"), icon: "house", code: 3)
+            keyButton(AppLanguage.text("key.recents"), icon: "square.stack.3d.up", code: 187)
+            Divider()
+                .frame(height: 26)
+            keyButton(AppLanguage.text("key.power"), icon: "power", code: 26)
+            keyButton(AppLanguage.text("key.volumeUp"), icon: "speaker.wave.2", code: 24)
+            keyButton(AppLanguage.text("key.volumeDown"), icon: "speaker.wave.1", code: 25)
+        }
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func keyButton(_ title: String, icon: String, code: Int) -> some View {
+        Button {
+            guard let running = selectedRunning else { return }
+            actions.sendKey(running, code)
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                Text(title)
+                    .font(.system(size: 10))
+            }
+            .frame(width: 56)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(selectedRunning?.isBooted != true)
+        .help(title)
+    }
+
+    private var previewMessage: String {
+        guard let selected else { return AppLanguage.text("preview.selectDevice") }
+        if selected.status == .starting { return AppLanguage.text("preview.starting") }
+        if selected.status == .stopped { return AppLanguage.text("preview.startAVD") }
+        if selectedRunning?.isBooted != true { return AppLanguage.text("preview.waitingForDevice") }
+        return model.previewStatus ?? AppLanguage.text("preview.connecting")
+    }
+
+    // MARK: - 设备操作
+
+    private func workspaceHeader(_ entry: DeviceEntry) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.name).font(.title2.weight(.semibold))
+                        .lineLimit(1).truncationMode(.middle).help(entry.name)
+                    HStack(spacing: 8) {
+                        Text(entry.metadata).foregroundStyle(.secondary)
+                        Label(entry.statusTitle, systemImage: "circle.fill")
+                            .foregroundStyle(entry.statusColor)
+                    }
+                    .font(.caption)
+                }
+                Spacer(minLength: 8)
+                primaryActions(entry)
+            }
+            HStack(spacing: 8) {
+                developerMenu(entry)
+                if let avd = entry.avd {
+                    snapshotMenu(avd, entry.device)
+                    managementMenu(avd, entry.device)
+                }
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func primaryActions(_ entry: DeviceEntry) -> some View {
+        if let avd = entry.avd {
+            if entry.status == .starting {
+                ProgressView().controlSize(.small).accessibilityLabel(AppLanguage.text("device.starting"))
+                Button(AppLanguage.text("action.cancelStart")) {
+                    if let device = entry.device {
+                        actions.shutdown(device, avd)
+                    } else {
+                        actions.cancelStart(avd)
+                    }
+                }
+            } else if let device = entry.device {
+                Button(AppLanguage.text("action.restart")) { actions.softReboot(device, avd) }
+                Button(AppLanguage.text("action.shutdown")) { actions.shutdown(device, avd) }
+            } else {
+                Button {
+                    actions.start(avd)
+                } label: {
+                    Label(AppLanguage.text("action.start"), systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        } else if let device = entry.device, device.isRealDevice {
+            Button(AppLanguage.text("action.softReboot")) { actions.softReboot(device, nil) }
+                .disabled(!device.isBooted)
+        }
+    }
+
+    private func developerMenu(_ entry: DeviceEntry) -> some View {
+        Menu {
+            Button(AppLanguage.text("action.screenshot")) {
+                if let device = entry.device { actions.screenshot(device, entry.avd) }
+            }
+            .disabled(entry.device == nil || (entry.device?.isRealDevice == true && entry.device?.isBooted == false))
+            Button(AppLanguage.text("action.adbShell")) {
+                if let device = entry.device { actions.openShell(device, entry.avd) }
+            }
+            .disabled(entry.device == nil)
+            Button("Logcat") {
+                if let device = entry.device { actions.openLogcat(device, entry.avd) }
+            }
+            .disabled(entry.device == nil)
+            if entry.avd != nil {
+                Divider()
+                Button(AppLanguage.text("action.openStudio"), action: actions.openStudio)
+            }
+        } label: {
+            Label(AppLanguage.text("menu.developerTools"), systemImage: "terminal")
+        }
+    }
+
+    private func snapshotMenu(_ avd: AVD, _ device: RunningEmulator?) -> some View {
+        Menu {
+            Button(AppLanguage.text("menu.saveSnapshot")) { actions.saveSnapshot(avd, device) }
+                .disabled(device == nil)
+            Button(AppLanguage.text("menu.loadSnapshot")) { actions.loadSnapshot(avd, device) }
+                .disabled(device == nil)
+            Divider()
+            Button(AppLanguage.text("menu.deleteSnapshot"), role: .destructive) { actions.deleteSnapshot(avd, device) }
+        } label: {
+            Label(AppLanguage.text("menu.snapshots"), systemImage: "camera.on.rectangle")
+        }
+    }
+
+    private func managementMenu(_ avd: AVD, _ device: RunningEmulator?) -> some View {
+        Menu {
+            Button(AppLanguage.text("action.coldBoot")) { actions.coldBoot(avd, device) }
+                .disabled(model.isStarting(avd.name) || device?.isBooted == false)
+            Divider()
+            Button(AppLanguage.text("menu.avdDetails")) { actions.details(avd, device) }
+            Button(AppLanguage.text("action.openAVDFolder")) { actions.openDirectory(avd) }
+            Button(AppLanguage.text("action.openEmulatorLog")) { actions.openLog(avd) }
+            Button(model.isPinned(avd) ? AppLanguage.text("action.unpin") : AppLanguage.text("action.pin")) { actions.togglePinned(avd) }
+            Menu(AppLanguage.text("menu.copyDeviceInfo")) {
+                Button(AppLanguage.text("menu.copyAVDName")) { actions.copyName(avd) }
+                Button(AppLanguage.text("menu.copyAVDPath")) { actions.copyPath(avd) }
+                Button(AppLanguage.text("menu.copyLaunchCommand")) { actions.copyCommand(avd) }
+            }
+            Divider()
+            Button(AppLanguage.text("menu.renameAVD")) { actions.rename(avd, device) }
+            Button(AppLanguage.text("menu.moveAVD")) { actions.move(avd, device) }
+            Divider()
+            Button(AppLanguage.text("menu.wipeData"), role: .destructive) { actions.wipe(avd, device) }
+            Button(AppLanguage.text("menu.deleteAVD"), role: .destructive) { actions.delete(avd, device) }
+        } label: {
+            Label(AppLanguage.text("menu.manage"), systemImage: "gearshape")
+        }
+    }
+}

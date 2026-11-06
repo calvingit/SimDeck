@@ -1,0 +1,38 @@
+name: Build macOS app
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (arm64)
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Run tests without Android devices
+        run: swift test --skip IntegrationTests
+
+      - name: Build and package
+        run: |
+          ./scripts/build-app.sh
+          app=build/AVDMenuBar.app
+          lipo -verify_arch arm64 "$app/Contents/MacOS/AVDMenuBar"
+          codesign --verify --strict "$app"
+          ditto -c -k --keepParent "$app" build/AVDMenuBar-macos-arm64.zip
+
+      - name: Upload application archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          path: build/AVDMenuBar-macos-arm64.zip
+          archive: false
+          if-no-files-found: error
