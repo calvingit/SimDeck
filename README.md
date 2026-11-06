@@ -39,6 +39,8 @@ open build/AVDMenuBar.app
 
 GitHub Actions 会在推送、拉取请求或手动触发时构建 Apple Silicon 版。打开 **Actions → Build macOS app**，在成功运行的 **Artifacts** 中下载 `AVDMenuBar-macos-arm64.zip`。解压后得到 `AVDMenuBar.app`；构建产物采用 ad-hoc 签名，未公证。
 
+推送版本标签后，构建成功会自动创建 GitHub Release。在 [Releases](https://github.com/calvingit/AVDMenuBar/releases) 下载 `AVDMenuBar-macos-arm64.dmg`，打开磁盘映像，将应用拖到 `Applications`。如需为已有标签补发 Release，在 `main` 上手动运行工作流并填写 `release_tag`。
+
 如需长期使用或开启登录时启动，先退出旧版，再用访达将构建产物拖到「应用程序」，并从该位置启动。
 
 App 只驻留菜单栏，不显示 Dock 图标。首次运行若被系统拦截，在「系统设置 → 隐私与安全性」中放行，或右键选择「打开」。
