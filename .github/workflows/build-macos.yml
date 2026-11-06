@@ -26,7 +26,7 @@ jobs:
         run: |
           ./scripts/build-app.sh
           app=build/AVDMenuBar.app
-          lipo -verify_arch arm64 "$app/Contents/MacOS/AVDMenuBar"
+          lipo "$app/Contents/MacOS/AVDMenuBar" -verify_arch arm64
           codesign --verify --strict "$app"
           ditto -c -k --keepParent "$app" build/AVDMenuBar-macos-arm64.zip
 
