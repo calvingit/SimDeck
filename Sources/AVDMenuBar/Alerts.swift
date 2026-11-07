@@ -3,7 +3,7 @@ import AppKit
 
 enum Alerts {
     static func error(_ title: String, _ message: String) {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = title
@@ -17,7 +17,7 @@ enum Alerts {
         message: String,
         actionTitle: String
     ) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = title

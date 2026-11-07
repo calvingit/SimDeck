@@ -50,7 +50,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         quitItem.target = self
         contextMenu.addItem(quitItem)
 
-        popover.behavior = isPinned ? .applicationDefined : .transient
         popover.contentViewController = NSHostingController(
             rootView: AVDPanelView(model: model, pinned: panelState, actions: actions)
         )

@@ -151,7 +151,7 @@ final class AppCoordinator {
         panel.allowsMultipleSelection = false
         panel.prompt = AppLanguage.text("action.choose")
         panel.message = AppLanguage.text("avd.move.chooseFolder", avd.name)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard panel.runModal() == .OK, let parent = panel.url else { return }
 
         let target = parent.appendingPathComponent("\(avd.name).avd")
@@ -251,7 +251,7 @@ final class AppCoordinator {
         alert.addButton(withTitle: AppLanguage.text("action.create"))
         alert.addButton(withTitle: AppLanguage.text("action.cancel"))
         alert.window.initialFirstResponder = nameField
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
 
         let name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -293,7 +293,7 @@ final class AppCoordinator {
         alert.messageText = avd.name
         alert.informativeText = lines.joined(separator: "\n")
         alert.addButton(withTitle: AppLanguage.text("action.ok"))
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         alert.runModal()
     }
 
@@ -454,7 +454,7 @@ final class AppCoordinator {
         field.stringValue = defaultValue
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
 
         let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -478,7 +478,7 @@ final class AppCoordinator {
         )
         popup.addItems(withTitles: items)
         alert.accessoryView = popup
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
         let index = popup.indexOfSelectedItem
         guard items.indices.contains(index) else { return nil }

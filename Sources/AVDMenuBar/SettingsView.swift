@@ -160,7 +160,7 @@ struct SettingsView: View {
                 panel.canChooseDirectories = false
                 panel.allowsMultipleSelection = false
                 panel.showsHiddenFiles = true
-                NSApp.activate(ignoringOtherApps: true)
+                NSApp.activate()
                 if panel.runModal() == .OK, let url = panel.url {
                     updatePath(url.path, at: keyPath)
                 }

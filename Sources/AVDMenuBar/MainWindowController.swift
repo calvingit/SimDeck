@@ -27,7 +27,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
     }
 
