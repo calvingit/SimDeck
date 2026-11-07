@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2
+
+- Added windowless preview for Android emulators: start an AVD without the emulator window (software rendering, quick-boot snapshots are never saved), with live preview and touch input over ADB, on-demand switching to a regular window ("Open in Window"), and automatic shutdown of app-started windowless instances when the app quits.
+- The main window device list can now be hidden or shown via the toolbar sidebar button or ⌘⌥S; a minimal app menu (Settings ⌘, / Quit ⌘Q / Toggle Sidebar ⌘⌥S) is shown while the main window is active.
+- Menu bar panel: retitled to SimDeck, tabs now show running device counts, and the panel pin button was removed (the panel always dismisses on outside clicks).
+- User-facing "AVD" wording was replaced with "emulator" across UI strings; device rows now show "Android <version> · API <level>" instead of an "AVD" prefix.
+
 ## 1.1
 
 - Renamed the project to SimDeck (formerly AVDMenuBar). The bundle identifier is now `local.simdeck`, so macOS treats an updated install as a new app: permissions and preferences reset on first launch.
