@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 按设计文档 §5.2 的"假可执行 + 参数记录"模式验证 baguette 子进程管理：
 /// stream 默认参数、AVCC 回放解码、SIGINT 干净退出、异常退出回调与二进制定位；
@@ -21,7 +21,7 @@ final class BaguetteMockE2ETests: XCTestCase {
         }
 
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AVDMenuBarBaguetteMock-\(UUID().uuidString)")
+            .appendingPathComponent("SimDeckBaguetteMock-\(UUID().uuidString)")
         recordFile = root.appendingPathComponent("record.txt")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 

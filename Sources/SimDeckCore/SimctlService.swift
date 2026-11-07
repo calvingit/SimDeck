@@ -187,7 +187,7 @@ public final class SimctlService: @unchecked Sendable {
     /// `io screenshot -` 无法输出到 stdout（实测约束），写入临时文件后读回。
     public func screenshot(udid: String) throws -> Data {
         let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("avdmenubar-simctl-\(UUID().uuidString).png")
+            .appendingPathComponent("simdeck-simctl-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: output) }
         let result = try run(["io", udid, "screenshot", output.path], timeout: 30)
         guard result.status == 0 else {

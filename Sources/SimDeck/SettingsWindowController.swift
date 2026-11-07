@@ -1,4 +1,4 @@
-import AVDCore
+import SimDeckCore
 import AppKit
 import SwiftUI
 

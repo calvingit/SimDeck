@@ -1,5 +1,5 @@
 import SwiftUI
-import AVDCore
+import SimDeckCore
 
 struct AVDPanelView: View {
     @ObservedObject var model: AppModel

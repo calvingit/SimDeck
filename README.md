@@ -1,10 +1,10 @@
-# AVD MenuBar
+# SimDeck
 
 English | [简体中文](README_zh.md)
 
 A native macOS menu bar app for managing local Android Virtual Devices (AVDs) and previewing Android devices connected over ADB.
 
-![AVD MenuBar demo: menu bar panel and main window preview](docs/demo-en.gif)
+![SimDeck demo: menu bar panel and main window preview](docs/demo-en.gif)
 
 [Requirements](#requirements) · [Build and run](#build-and-run) · [Contributing](CONTRIBUTING.md)
 
@@ -45,7 +45,7 @@ With full Xcode (or the Command Line Tools) installed, the app also manages iOS 
    cd Vendor/baguette && shasum -a 256 Baguette > checksums.txt
    ```
 
-5. Run `./scripts/build-app.sh`; the binary and its bundle are copied to `AVDMenuBar.app/Contents/Resources/Helpers/` and ad-hoc signed. The build fails if `checksums.txt` is missing or does not match.
+5. Run `./scripts/build-app.sh`; the binary and its bundle are copied to `SimDeck.app/Contents/Resources/Helpers/` and ad-hoc signed. The build fails if `checksums.txt` is missing or does not match.
 
 Without `Vendor/baguette/` the build prints a notice and ships the basic tier only. The baguette binary is not committed to this repository. You can also point the app at an external copy in Settings → iOS Simulators.
 
@@ -59,10 +59,10 @@ Without `Vendor/baguette/` the build prints a notice and ships the basic tier on
 
 ```bash
 ./scripts/build-app.sh
-open build/AVDMenuBar.app
+open build/SimDeck.app
 ```
 
-The build is ad-hoc signed. GitHub Actions builds the Apple Silicon version for every push and publishes a DMG for version tags; see [Releases](https://github.com/calvingit/AVDMenuBar/releases).
+The build is ad-hoc signed. GitHub Actions builds the Apple Silicon version for every push and publishes a DMG for version tags; see [Releases](https://github.com/calvingit/SimDeck/releases).
 
 On first launch, macOS may ask for access to the Android SDK or removable volumes. Grant it to list and manage AVDs. The app runs in the menu bar only.
 
@@ -79,7 +79,7 @@ On first launch, macOS may ask for access to the Android SDK or removable volume
 - Wiping data keeps the old snapshots as `snapshots.pre-wipe-<time>`.
 - The preview uses an ADB video stream and falls back to screenshots when the stream is unavailable.
 - Only named snapshots are listed; saving and loading require a running emulator.
-- Emulator logs are written to `~/Library/Logs/AVDMenuBar/<AVD name>.log`.
+- Emulator logs are written to `~/Library/Logs/SimDeck/<AVD name>.log`.
 
 ## Project docs
 

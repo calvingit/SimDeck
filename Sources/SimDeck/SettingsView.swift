@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import AVDCore
+import SimDeckCore
 
 struct SettingsView: View {
     @ObservedObject var model: AppModel
@@ -198,8 +198,8 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 Text(AppLanguage.text("settings.about.github"))
                     .frame(width: 92, alignment: .leading)
-                Link("github.com/calvingit/AVDMenuBar",
-                     destination: URL(string: "https://github.com/calvingit/AVDMenuBar")!)
+                Link("github.com/calvingit/SimDeck",
+                     destination: URL(string: "https://github.com/calvingit/SimDeck")!)
             }
         }
     }

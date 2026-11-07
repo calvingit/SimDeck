@@ -31,15 +31,15 @@ jobs:
       - name: Build and package
         run: |
           ./scripts/build-app.sh
-          app=build/AVDMenuBar.app
-          lipo "$app/Contents/MacOS/AVDMenuBar" -verify_arch arm64
+          app=build/SimDeck.app
+          lipo "$app/Contents/MacOS/SimDeck" -verify_arch arm64
           codesign --verify --strict "$app"
-          ditto -c -k --keepParent "$app" build/AVDMenuBar-macos-arm64.zip
+          ditto -c -k --keepParent "$app" build/SimDeck-macos-arm64.zip
 
       - name: Upload application archive
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          path: build/AVDMenuBar-macos-arm64.zip
+          path: build/SimDeck-macos-arm64.zip
           archive: false
           if-no-files-found: error
 
@@ -47,17 +47,17 @@ jobs:
         if: github.ref_type == 'tag' || inputs.release_tag != ''
         run: |
           mkdir -p build/dmg-root
-          ditto build/AVDMenuBar.app build/dmg-root/AVDMenuBar.app
+          ditto build/SimDeck.app build/dmg-root/SimDeck.app
           ln -s /Applications build/dmg-root/Applications
-          hdiutil create -volname 'AVD MenuBar' -srcfolder build/dmg-root \
-            -format UDZO build/AVDMenuBar-macos-arm64.dmg
-          hdiutil verify build/AVDMenuBar-macos-arm64.dmg
+          hdiutil create -volname 'SimDeck' -srcfolder build/dmg-root \
+            -format UDZO build/SimDeck-macos-arm64.dmg
+          hdiutil verify build/SimDeck-macos-arm64.dmg
 
       - name: Upload installer disk image
         if: github.ref_type == 'tag' || inputs.release_tag != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          path: build/AVDMenuBar-macos-arm64.dmg
+          path: build/SimDeck-macos-arm64.dmg
           archive: false
           if-no-files-found: error
 
@@ -72,7 +72,7 @@ jobs:
       - name: Download installer
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: AVDMenuBar-macos-arm64.dmg
+          name: SimDeck-macos-arm64.dmg
           path: dist
 
       - name: Publish release and attach installer
@@ -81,4 +81,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
         run: |
-          gh release create --verify-tag --generate-notes --title "AVD MenuBar $RELEASE_TAG" -- "$RELEASE_TAG" dist/AVDMenuBar-macos-arm64.dmg
+          gh release create --verify-tag --generate-notes --title "SimDeck $RELEASE_TAG" -- "$RELEASE_TAG" dist/SimDeck-macos-arm64.dmg

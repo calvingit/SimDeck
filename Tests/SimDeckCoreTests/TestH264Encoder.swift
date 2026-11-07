@@ -2,7 +2,7 @@ import CoreMedia
 import CoreVideo
 import Foundation
 import VideoToolbox
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 测试辅助：用 VideoToolbox 压缩会话编码两帧 64x48 纯色图，产出真实可解码的
 /// H.264 数据（avcC 配置记录 + AVCC sample），供解码核心测试与 baguette mock 回放使用。

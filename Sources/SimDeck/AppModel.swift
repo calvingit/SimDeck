@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 import Foundation
-import AVDCore
+import SimDeckCore
 
 enum PreviewPipeline: Equatable {
     case adbStream
@@ -60,7 +60,7 @@ struct SettingsDraft: Equatable {
 
 /// 应用状态与所有命令调度。重活都在串行后台队列执行，状态只在主线程更新。
 final class AppModel: ObservableObject {
-    private let queue = DispatchQueue(label: "local.avdmenubar.commands")
+    private let queue = DispatchQueue(label: "local.simdeck.commands")
 
     private(set) var tools: ToolPaths?
     private var repository: AVDRepository?
@@ -315,7 +315,7 @@ final class AppModel: ObservableObject {
 
     static var logDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/AVDMenuBar", isDirectory: true)
+            .appendingPathComponent("Library/Logs/SimDeck", isDirectory: true)
     }
 
     func logFileURL(for avd: AVD) -> URL {

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Renamed the project to SimDeck (formerly AVDMenuBar). The bundle identifier is now `local.simdeck`, so macOS treats an updated install as a new app: permissions and preferences reset on first launch.
 - Added iOS simulator support (requires Xcode): list, boot/shutdown/restart, create/rename/delete/erase with confirmation dialogs, screenshot preview with automatic fallback, simulator logs in a terminal, and app management (install .app, launch/terminate/uninstall by bundle id, open URL).
 - Added a create wizard for iOS simulators that filters device types by the selected runtime's supported device types.
 - Added optional bundled baguette for the enhanced tier (live H.264 preview, touch and hardware-key input). Place the binary in `Vendor/baguette/` before building, with its checksum recorded in `checksums.txt` — see README.

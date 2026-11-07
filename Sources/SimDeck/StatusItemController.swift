@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
-import AVDCore
+import SimDeckCore
 
 /// 面板常驻置顶状态，供面板内的开关按钮反映。
 final class PanelState: ObservableObject {
@@ -36,7 +36,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             button.image = image
             button.imagePosition = .imageLeading
             button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-            button.toolTip = "AVD MenuBar"
+            button.toolTip = "SimDeck"
             button.target = self
             button.action = #selector(handleStatusItemClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])

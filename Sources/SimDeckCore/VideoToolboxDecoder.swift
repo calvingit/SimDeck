@@ -30,7 +30,7 @@ public final class VideoToolboxDecoder {
         rebuildSession(format: format)
         guard decompressionSession != nil else {
             throw NSError(
-                domain: "AVDMenuBar.h264",
+                domain: "SimDeck.h264",
                 code: -1,
                 userInfo: [NSLocalizedDescriptionKey: AppLanguage.text("stream.parameterSetFailed", "session")]
             )
@@ -151,7 +151,7 @@ public final class VideoToolboxDecoder {
         }
         guard status == noErr, let format else {
             throw NSError(
-                domain: "AVDMenuBar.h264",
+                domain: "SimDeck.h264",
                 code: Int(status),
                 userInfo: [NSLocalizedDescriptionKey: AppLanguage.text("stream.parameterSetFailed", String(status))]
             )

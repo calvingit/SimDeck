@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 依赖本机 Xcode 与 baguette 的 iOS 模拟器真机流冒烟测试，默认跳过。
 /// 运行：AVD_IOS_INTEGRATION=1 swift test --filter IOSRealDeviceTests
@@ -31,7 +31,7 @@ final class IOSRealDeviceTests: XCTestCase {
             }
             return url
         }
-        // <repo>/Tests/AVDCoreTests/IOSRealDeviceTests.swift → <repo>/Vendor/baguette/Baguette
+        // <repo>/Tests/SimDeckCoreTests/IOSRealDeviceTests.swift → <repo>/Vendor/baguette/Baguette
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -58,7 +58,7 @@ final class IOSRealDeviceTests: XCTestCase {
             throw XCTSkip("runtime \(runtime.version) 没有可选机型")
         }
 
-        let name = "AVDMenuBar-IOS-IT"
+        let name = "SimDeck-IOS-IT"
         let udid = try simctl.create(name: name, deviceType: deviceType.identifier, runtime: runtime.identifier)
         defer {
             try? simctl.shutdown(udid: udid)

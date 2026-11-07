@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 依赖本机 Android SDK 的冒烟测试，默认跳过。
 /// 运行：AVD_INTEGRATION=1 swift test --filter IntegrationTests

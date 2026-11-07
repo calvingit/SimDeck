@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 用假的 avdmanager / emulator / adb 脚本验证进程生命周期与命令参数。
 /// 默认跳过；运行：AVD_MOCK_E2E=1 swift test --filter MockE2ETests
@@ -19,7 +19,7 @@ final class MockE2ETests: XCTestCase {
         avdName = "MockAVD_\(UUID().uuidString.prefix(6))"
         // 路径故意包含空格，覆盖 ps 参数被空格切分的场景。
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AVDMenuBarMock-\(UUID().uuidString) With Space")
+            .appendingPathComponent("SimDeckMock-\(UUID().uuidString) With Space")
         avdDirectory = root.appendingPathComponent("avd/\(avdName!).avd")
         recordFile = root.appendingPathComponent("record.txt")
 

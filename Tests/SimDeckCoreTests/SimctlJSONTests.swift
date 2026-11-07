@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 用本机真实 `xcrun simctl list -j` 输出（macOS 26.6 / Xcode 27.0 实测）裁剪成的静态
 /// fixture 验证容错解码：缺字段不崩、未知 state 原样保留、非 iOS runtime 跳过。

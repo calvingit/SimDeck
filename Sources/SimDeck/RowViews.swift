@@ -1,5 +1,5 @@
 import SwiftUI
-import AVDCore
+import SimDeckCore
 
 struct DeviceEntry: Identifiable {
     enum ID: Hashable {

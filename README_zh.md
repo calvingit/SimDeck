@@ -1,10 +1,10 @@
-# AVD MenuBar
+# SimDeck
 
 [English](README.md) | 简体中文
 
 一个原生 macOS 菜单栏工具，用于管理本机 Android 虚拟设备（AVD），也可预览通过 ADB 连接的 Android 设备。
 
-![AVD MenuBar 演示：菜单栏设备面板与主窗口预览](docs/demo-zh.gif)
+![SimDeck 演示：菜单栏设备面板与主窗口预览](docs/demo-zh.gif)
 
 [环境要求](#环境要求) · [构建与运行](#构建与运行) · [贡献](CONTRIBUTING.md)
 
@@ -45,7 +45,7 @@
    cd Vendor/baguette && shasum -a 256 Baguette > checksums.txt
    ```
 
-5. 运行 `./scripts/build-app.sh`；二进制与资源包会拷贝到 `AVDMenuBar.app/Contents/Resources/Helpers/` 并 ad-hoc 签名。`checksums.txt` 缺失或不匹配时构建会直接失败。
+5. 运行 `./scripts/build-app.sh`；二进制与资源包会拷贝到 `SimDeck.app/Contents/Resources/Helpers/` 并 ad-hoc 签名。`checksums.txt` 缺失或不匹配时构建会直接失败。
 
 缺少 `Vendor/baguette/` 时构建打印提示并跳过，产物只含基础档。baguette 二进制不入库；也可以在「设置 → iOS 模拟器」中把 baguette 指向外部副本。
 
@@ -59,10 +59,10 @@
 
 ```bash
 ./scripts/build-app.sh
-open build/AVDMenuBar.app
+open build/SimDeck.app
 ```
 
-产物为 ad-hoc 签名的 `build/AVDMenuBar.app`。GitHub Actions 会为每次推送构建 Apple Silicon 版本，推送版本标签时发布 DMG，见 [Releases](https://github.com/calvingit/AVDMenuBar/releases)。
+产物为 ad-hoc 签名的 `build/SimDeck.app`。GitHub Actions 会为每次推送构建 Apple Silicon 版本，推送版本标签时发布 DMG，见 [Releases](https://github.com/calvingit/SimDeck/releases)。
 
 首次启动时，macOS 可能请求访问 Android SDK 或可移除卷宗；授权后才能读取和操作 AVD。应用只驻留菜单栏。
 
@@ -79,7 +79,7 @@ open build/AVDMenuBar.app
 - 清除数据会把旧快照保留为 `snapshots.pre-wipe-<时间>`。
 - 预览使用 ADB 视频流；视频流不可用时自动降级为截屏。
 - 只展示命名快照；保存和加载需要模拟器处于运行状态。
-- 模拟器日志位于 `~/Library/Logs/AVDMenuBar/<AVD 名>.log`。
+- 模拟器日志位于 `~/Library/Logs/SimDeck/<AVD 名>.log`。
 
 ## 项目文档
 

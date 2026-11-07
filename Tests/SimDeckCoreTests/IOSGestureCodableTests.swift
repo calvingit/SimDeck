@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 与 baguette wire 协议（v0.2.13，`baguette input` 的 JSON lines）逐字段比对：
 /// 坐标一律 device points（不做像素换算），位置类手势必带 width/height，

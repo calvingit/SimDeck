@@ -1,4 +1,4 @@
-import AVDCore
+import SimDeckCore
 import AppKit
 
 /// 应用主题：默认跟随系统，可强制浅色/暗色。作用于 App 的所有窗口（面板/主界面/设置）。

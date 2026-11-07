@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 final class AVDListParserTests: XCTestCase {
     private let sample = """
@@ -178,7 +178,7 @@ final class ToolLocatorTests: XCTestCase {
 
     override func setUpWithError() throws {
         let base = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AVDMenuBarTests-\(UUID().uuidString)")
+            .appendingPathComponent("SimDeckTests-\(UUID().uuidString)")
         root = base
         try FileManager.default.createDirectory(
             at: base.appendingPathComponent("cmdline-tools/latest/bin"),

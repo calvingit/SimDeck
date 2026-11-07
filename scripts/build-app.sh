@@ -7,12 +7,12 @@ CONFIG="${CONFIG:-release}"
 swift build -c "$CONFIG"
 
 BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
-APP_DIR="$PWD/build/AVDMenuBar.app"
+APP_DIR="$PWD/build/SimDeck.app"
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-cp "$BIN_DIR/AVDMenuBar" "$APP_DIR/Contents/MacOS/AVDMenuBar"
-cp -R "$BIN_DIR/AVDMenuBar_AVDCore.bundle" "$APP_DIR/Contents/Resources/"
+cp "$BIN_DIR/SimDeck" "$APP_DIR/Contents/MacOS/SimDeck"
+cp -R "$BIN_DIR/SimDeck_SimDeckCore.bundle" "$APP_DIR/Contents/Resources/"
 cp -R Resources/en.lproj Resources/zh-Hans.lproj "$APP_DIR/Contents/Resources/"
 cp Resources/Info.plist "$APP_DIR/Contents/Info.plist"
 
@@ -53,4 +53,4 @@ fi
 codesign --force --sign - "$APP_DIR"
 
 echo "已生成：$APP_DIR"
-echo "安装：rm -rf \"/Applications/AVDMenuBar.app\" && cp -R \"$APP_DIR\" /Applications/ && open \"/Applications/AVDMenuBar.app\""
+echo "安装：rm -rf \"/Applications/SimDeck.app\" && cp -R \"$APP_DIR\" /Applications/ && open \"/Applications/SimDeck.app\""

@@ -1,4 +1,4 @@
-import AVDCore
+import SimDeckCore
 
 struct PanelActions {
     var start: (AVD) -> Void

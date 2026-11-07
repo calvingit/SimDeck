@@ -14,9 +14,9 @@ final class MainWindowController: NSObject, NSWindowDelegate {
             defer: false
         )
         super.init()
-        window.title = "AVD MenuBar"
+        window.title = "SimDeck"
         window.identifier = NSUserInterfaceItemIdentifier("main")
-        window.setFrameAutosaveName("AVDMenuBarMain")
+        window.setFrameAutosaveName("SimDeckMain")
         window.contentMinSize = NSSize(width: 740, height: 480)
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(

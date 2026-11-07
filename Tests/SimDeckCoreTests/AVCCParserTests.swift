@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 final class AVCCParserTests: XCTestCase {
     /// 按 wire 格式打包一个分帧块：[4 字节大端长度][1 字节 tag][payload]，长度含 tag 字节。

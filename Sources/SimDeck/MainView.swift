@@ -1,5 +1,5 @@
 import SwiftUI
-import AVDCore
+import SimDeckCore
 
 struct MainView: View {
     @ObservedObject var model: AppModel
@@ -334,7 +334,7 @@ struct MainView: View {
     }
 
     /// iOS 触摸映射：baguette 帧与 simctl 截图都只含屏幕内容（无 Android 捕获的窗口标题栏），
-    /// 预览位置按比例线性映射到 device points；手势编码由 AVDCore 的 IOSGesture 完成。
+    /// 预览位置按比例线性映射到 device points；手势编码由 SimDeckCore 的 IOSGesture 完成。
     private func handleIOSTouch(value: DragGesture.Value, elapsedMs: Int, fitRect: CGRect) {
         guard let simulator = selected?.simulator, simulator.isBooted,
               model.isEnhancedTierAvailable,

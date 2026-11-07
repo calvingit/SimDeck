@@ -1,5 +1,5 @@
 import AppKit
-import AVDCore
+import SimDeckCore
 
 final class AppCoordinator {
     private let model: AppModel
@@ -739,7 +739,7 @@ private enum TerminalLauncher {
     /// filePrefix 区分用途（adb=Android 终端，simctl-log=iOS 日志），identifier 为设备序号/UDID。
     static func open(command: String, filePrefix: String, identifier: String) throws {
         let directory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/AVDMenuBar/scripts", isDirectory: true)
+            .appendingPathComponent("Library/Application Support/SimDeck/scripts", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let safeName = identifier.map { character -> Character in
             character.isLetter || character.isNumber || character == "." || character == "-" || character == "_"
@@ -754,7 +754,7 @@ private enum TerminalLauncher {
         )
         guard NSWorkspace.shared.open(url) else {
             throw NSError(
-                domain: "AVDMenuBar",
+                domain: "SimDeck",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: AppLanguage.text("terminal.handlerMissing")]
             )

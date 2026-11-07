@@ -5,15 +5,15 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>zh-Hans</string>
     <key>CFBundleDisplayName</key>
-    <string>AVD MenuBar</string>
+    <string>SimDeck</string>
     <key>CFBundleExecutable</key>
-    <string>AVDMenuBar</string>
+    <string>SimDeck</string>
     <key>CFBundleIdentifier</key>
-    <string>local.avdmenubar</string>
+    <string>local.simdeck</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>AVD MenuBar</string>
+    <string>SimDeck</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

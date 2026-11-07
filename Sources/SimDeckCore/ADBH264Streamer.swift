@@ -32,7 +32,7 @@ public final class ADBH264Streamer: NSObject {
     private var process: Process?
     private var pipe: Pipe?
 
-    private let parserQueue = DispatchQueue(label: "local.avdmenubar.h264.parser")
+    private let parserQueue = DispatchQueue(label: "local.simdeck.h264.parser")
 
     // 以下解码状态仅在 parserQueue 上访问。
     private var parser = H264AnnexBParser()

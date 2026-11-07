@@ -1,6 +1,6 @@
 import CoreMedia
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 参照 H264AnnexBParserTests 思路：用 VideoToolbox 压缩会话产出真实 H.264，
 /// 验证共用解码核心的配置、解码与失效路径。

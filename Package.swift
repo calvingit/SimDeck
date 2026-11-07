@@ -2,26 +2,26 @@
 import PackageDescription
 
 let package = Package(
-    name: "AVDMenuBar",
+    name: "SimDeck",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "AVDMenuBar", targets: ["AVDMenuBar"])
+        .executable(name: "SimDeck", targets: ["SimDeck"])
     ],
     targets: [
         .target(
-            name: "AVDCore",
-            path: "Sources/AVDCore",
+            name: "SimDeckCore",
+            path: "Sources/SimDeckCore",
             resources: [.copy("Localization")]
         ),
         .executableTarget(
-            name: "AVDMenuBar",
-            dependencies: ["AVDCore"],
-            path: "Sources/AVDMenuBar"
+            name: "SimDeck",
+            dependencies: ["SimDeckCore"],
+            path: "Sources/SimDeck"
         ),
         .testTarget(
-            name: "AVDCoreTests",
-            dependencies: ["AVDCore"],
-            path: "Tests/AVDCoreTests"
+            name: "SimDeckCoreTests",
+            dependencies: ["SimDeckCore"],
+            path: "Tests/SimDeckCoreTests"
         )
     ]
 )

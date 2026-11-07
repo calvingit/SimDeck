@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 final class SnapshotServiceTests: XCTestCase {
     private var root: URL!

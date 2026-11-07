@@ -30,7 +30,7 @@
 ## 2. 总体架构
 
 ```
-AVDMenuBar (UI/AppKit)
+SimDeck (UI/AppKit)
    │  PanelActions / AppCoordinator（按平台路由）
 AppModel
    ├── Android 侧（现有，不动）：AVDRepository / EmulatorController / DeviceMonitor
@@ -52,27 +52,27 @@ AppModel
 | 增强 | + 内嵌 baguette（macOS 15+，arm64） | 60fps H.264 预览 + 触摸/滑动/双指 + Home/Lock/音量键 + UI 树 |
 | 降级 | baguette 流失败 | 自动回退截图轮询（复用现有 PreviewPipeline 降级模式） |
 
-**决策 3（已确认）：内嵌打包。** 固定版本的 baguette 二进制放进 `AVDMenuBar.app/Contents/Resources/Helpers/`，`build-app.sh` 负责 ad-hoc 签名与 checksum 校验；不依赖用户安装 brew。
+**决策 3（已确认）：内嵌打包。** 固定版本的 baguette 二进制放进 `SimDeck.app/Contents/Resources/Helpers/`，`build-app.sh` 负责 ad-hoc 签名与 checksum 校验；不依赖用户安装 brew。
 
 ## 3. 代码改动清单
 
 | 文件 | 动作 | 内容 |
 |---|---|---|
-| `Sources/AVDCore/IOSModels.swift` | 新增 | `SimulatorDevice`、`SimulatorRuntime`、`SimulatorDeviceType`、`IOSGesture` |
-| `Sources/AVDCore/SimctlService.swift` | 新增 | `simctl` 封装 + JSON 解析 + 截图 + dtuhidd 影子检测 |
-| `Sources/AVDCore/SimulatorMonitor.swift` | 新增 | 轮询设备状态 |
-| `Sources/AVDCore/BaguetteController.swift` | 新增 | stream/input/heal 进程管理、能力探测 |
-| `Sources/AVDCore/AVCCParser.swift` | 新增 | `[4B 大端长度][1B tag][payload]` 分帧；tag 0x01 avcC / 0x02 IDR / 0x03 delta / 0x04 JPEG seed |
-| `Sources/AVDCore/VideoToolboxDecoder.swift` | 新增 | 从 `ADBH264Streamer` 抽出的解码核心，两个 streamer 共用 |
-| `Sources/AVDCore/ADBH264Streamer.swift` | 微改 | 改用共用 decoder，行为不变（现有集成测试守护） |
-| `Sources/AVDMenuBar/AppModel.swift` | 修改 | iOS 状态与动作；`PreviewPipeline` 增加 `.iosStream` / `.iosPolling` |
-| `Sources/AVDMenuBar/RowViews.swift` | 修改 | `DeviceEntry.ID` 增 `.iosSimulator(String)`（UDID）；`platform` 字段；行元数据 "iOS 27.0 · iPhone 17 Pro" |
-| `Sources/AVDMenuBar/MainView.swift` | 修改 | 按键条按平台切换：Android=现有 keycode；iOS=Home/Lock/音量（增强档）或隐藏（基础档） |
-| `Sources/AVDMenuBar/AppCoordinator.swift` / `PanelActions.swift` | 修改 | iOS 动作路由 + 破坏性确认（复用 `Alerts.confirmDestructive`） |
-| `Sources/AVDMenuBar/SettingsView.swift` | 修改 | Xcode 路径与 baguette 状态展示；baguette 路径覆盖项 |
+| `Sources/SimDeckCore/IOSModels.swift` | 新增 | `SimulatorDevice`、`SimulatorRuntime`、`SimulatorDeviceType`、`IOSGesture` |
+| `Sources/SimDeckCore/SimctlService.swift` | 新增 | `simctl` 封装 + JSON 解析 + 截图 + dtuhidd 影子检测 |
+| `Sources/SimDeckCore/SimulatorMonitor.swift` | 新增 | 轮询设备状态 |
+| `Sources/SimDeckCore/BaguetteController.swift` | 新增 | stream/input/heal 进程管理、能力探测 |
+| `Sources/SimDeckCore/AVCCParser.swift` | 新增 | `[4B 大端长度][1B tag][payload]` 分帧；tag 0x01 avcC / 0x02 IDR / 0x03 delta / 0x04 JPEG seed |
+| `Sources/SimDeckCore/VideoToolboxDecoder.swift` | 新增 | 从 `ADBH264Streamer` 抽出的解码核心，两个 streamer 共用 |
+| `Sources/SimDeckCore/ADBH264Streamer.swift` | 微改 | 改用共用 decoder，行为不变（现有集成测试守护） |
+| `Sources/SimDeck/AppModel.swift` | 修改 | iOS 状态与动作；`PreviewPipeline` 增加 `.iosStream` / `.iosPolling` |
+| `Sources/SimDeck/RowViews.swift` | 修改 | `DeviceEntry.ID` 增 `.iosSimulator(String)`（UDID）；`platform` 字段；行元数据 "iOS 27.0 · iPhone 17 Pro" |
+| `Sources/SimDeck/MainView.swift` | 修改 | 按键条按平台切换：Android=现有 keycode；iOS=Home/Lock/音量（增强档）或隐藏（基础档） |
+| `Sources/SimDeck/AppCoordinator.swift` / `PanelActions.swift` | 修改 | iOS 动作路由 + 破坏性确认（复用 `Alerts.confirmDestructive`） |
+| `Sources/SimDeck/SettingsView.swift` | 修改 | Xcode 路径与 baguette 状态展示；baguette 路径覆盖项 |
 | `scripts/build-app.sh` | 修改 | 拷贝 baguette 到 Helpers/，ad-hoc 签名，校验 checksum |
-| `Sources/AVDCore/Localization/{en,zh-Hans}.lproj` | 修改 | 新增 `ios.*` 键，双语同步 |
-| `Tests/AVDCoreTests/` | 新增 | 见 §5 |
+| `Sources/SimDeckCore/Localization/{en,zh-Hans}.lproj` | 修改 | 新增 `ios.*` 键，双语同步 |
+| `Tests/SimDeckCoreTests/` | 新增 | 见 §5 |
 
 不动的：`ToolPaths`/`ToolLocator`、`SnapshotService`、`AVDProvisioningService`、面板置顶/外观/语言。
 

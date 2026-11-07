@@ -1,5 +1,5 @@
 import XCTest
-@testable import AVDCore
+@testable import SimDeckCore
 
 /// 按设计文档 §5.2 的"假可执行 + 参数记录"模式验证 simctl 封装：
 /// 列表、启停、删除、擦除前置 shutdown、创建/重命名、截图与输入影子检测。
@@ -21,7 +21,7 @@ final class SimctlMockE2ETests: XCTestCase {
         }
 
         root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("AVDMenuBarSimctlMock-\(UUID().uuidString)")
+            .appendingPathComponent("SimDeckSimctlMock-\(UUID().uuidString)")
         recordFile = root.appendingPathComponent("record.txt")
         shadowFlag = root.appendingPathComponent("dtuhidd-shadow")
 

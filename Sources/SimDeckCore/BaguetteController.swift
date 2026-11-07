@@ -28,7 +28,7 @@ public final class BaguetteController: @unchecked Sendable {
     private var pipe: Pipe?
     private var stderrPipe: Pipe?
 
-    private let parseQueue = DispatchQueue(label: "local.avdmenubar.baguette.parse")
+    private let parseQueue = DispatchQueue(label: "local.simdeck.baguette.parse")
     // 以下状态仅在 parseQueue 上访问。
     private var parser = AVCCParser()
     private let decoder = VideoToolboxDecoder()
