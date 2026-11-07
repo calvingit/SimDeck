@@ -44,8 +44,8 @@ if [ "$EMBED_BAGUETTE" = "1" ]; then
   mkdir -p "$APP_DIR/Contents/Resources/Helpers"
   cp "$VENDOR_DIR/Baguette" "$APP_DIR/Contents/Resources/Helpers/Baguette"
   cp -R "$VENDOR_DIR/Baguette_Baguette.bundle" "$APP_DIR/Contents/Resources/Helpers/"
-  # 嵌套代码先签名，再签外层 bundle 封印其签名。
-  codesign --force --sign - "$APP_DIR/Contents/Resources/Helpers/Baguette_Baguette.bundle"
+  # 只对二进制 ad-hoc 重签；Baguette_Baguette.bundle 是 SPM 资源包（无 Contents 结构），
+  # 不能按 bundle 签名，随外层 app 的签名作为普通资源封存。
   codesign --force --sign - "$APP_DIR/Contents/Resources/Helpers/Baguette"
   echo "已内嵌 baguette（checksum 已校验）：$APP_DIR/Contents/Resources/Helpers/"
 fi
