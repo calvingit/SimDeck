@@ -14,9 +14,10 @@ public final class SimulatorMonitor: @unchecked Sendable {
         try simctl.listDevices()
     }
 
-    /// 创建模拟器时的候选 runtime，仅 iOS，按版本降序。
+    /// 创建模拟器时的候选 runtime：仅已安装可用的 iOS runtime，按版本降序
+    /// （设计 §6 Phase 4 AC——向导只能选可用组合；`list -j runtimes` 含未安装条目）。
     public func iosRuntimes() throws -> [SimulatorRuntime] {
-        try simctl.listRuntimes().filter(\.isIOS)
+        try simctl.listRuntimes().filter { $0.isIOS && $0.isAvailable }
     }
 
     /// 创建模拟器时的候选机型，按名称升序。

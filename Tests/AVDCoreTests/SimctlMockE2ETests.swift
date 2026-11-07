@@ -59,6 +59,29 @@ final class SimctlMockE2ETests: XCTestCase {
         }
         """.write(to: root.appendingPathComponent("devicetypes.json"), atomically: true, encoding: .utf8)
         try """
+        {
+          "runtimes" : [
+            {
+              "identifier" : "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+              "version" : "27.0",
+              "buildversion" : "24A434",
+              "isAvailable" : true
+            },
+            {
+              "identifier" : "com.apple.CoreSimulator.SimRuntime.iOS-18-6",
+              "version" : "18.6",
+              "buildversion" : "22G86",
+              "isAvailable" : false
+            },
+            {
+              "identifier" : "com.apple.CoreSimulator.SimRuntime.watchOS-11-0",
+              "version" : "11.0",
+              "isAvailable" : true
+            }
+          ]
+        }
+        """.write(to: root.appendingPathComponent("runtimes.json"), atomically: true, encoding: .utf8)
+        try """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -172,6 +195,18 @@ final class SimctlMockE2ETests: XCTestCase {
         XCTAssertTrue(recordedCommands().contains("rename \(Self.bootedUDID) Renamed iPhone"))
     }
 
+    // MARK: - 创建向导候选
+
+    /// 设计 §6 Phase 4 AC——向导只能选可用组合：`list -j runtimes` 含未安装条目，
+    /// iosRuntimes() 必须剔除 unavailable 与非 iOS runtime。
+    func testIOSRuntimesExcludeUnavailableAndNonIOS() throws {
+        let runtimes = try monitor.iosRuntimes()
+
+        XCTAssertEqual(runtimes.map(\.version), ["27.0"], "只保留可用的 iOS runtime")
+        XCTAssertTrue(runtimes.allSatisfy(\.isAvailable))
+        XCTAssertTrue(recordedCommands().contains("list -j runtimes"))
+    }
+
     // MARK: - App 管理
 
     func testInstallUninstallTerminateRecordArguments() throws {
@@ -278,6 +313,8 @@ final class SimctlMockE2ETests: XCTestCase {
               cat "\(root.appendingPathComponent("devices.json").path)"
             elif [ "$3" = "devicetypes" ]; then
               cat "\(root.appendingPathComponent("devicetypes.json").path)"
+            elif [ "$3" = "runtimes" ]; then
+              cat "\(root.appendingPathComponent("runtimes.json").path)"
             fi
             ;;
           create)
