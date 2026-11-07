@@ -142,7 +142,8 @@ extension AppModel {
             DeviceEntry(avd: nil, device: device, props: deviceProps[device.serial], isPinned: false,
                         status: !device.isRealDevice && !device.isBooted ? .starting : .running)
         }
-        let iosEntries = simulators.map { simulator in
+        // 不可用的模拟器（运行时被删除后的残留设备记录）无法启动，直接从列表隐藏。
+        let iosEntries = simulators.filter { $0.isAvailable }.map { simulator in
             DeviceEntry(simulator: simulator,
                         isPinned: false,
                         status: DeviceEntry.status(forSimulator: simulator),
@@ -205,4 +206,36 @@ struct DeviceGroups<Row: View>: View {
             }
         }
     }
+}
+
+extension DeviceEntry.Platform {
+    /// 分段控件的初始平台：没有 Android 设备而有 iOS 模拟器时直接落在 iOS，避免首屏空列表。
+    static func initialSelection(for entries: [DeviceEntry]) -> DeviceEntry.Platform {
+        let hasAndroid = entries.contains { $0.platform == .android }
+        let hasIOS = entries.contains { $0.platform == .iosSimulator }
+        return !hasAndroid && hasIOS ? .iosSimulator : .android
+    }
+}
+
+/// 主窗口与面板共用的 Android / iOS 平台切换分段控件，标签带设备数。
+struct DevicePlatformPicker: View {
+    let entries: [DeviceEntry]
+    @Binding var selection: DeviceEntry.Platform
+
+    var body: some View {
+        Picker(AppLanguage.text("tab.platform"), selection: $selection) {
+            Text(AppLanguage.text("tab.android", String(androidCount)))
+                .tag(DeviceEntry.Platform.android)
+            Text(AppLanguage.text("tab.ios", String(iosCount)))
+                .tag(DeviceEntry.Platform.iosSimulator)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel(AppLanguage.text("tab.platform"))
+    }
+
+    private var androidCount: Int { entries.filter { $0.platform == .android }.count }
+    private var iosCount: Int { entries.filter { $0.platform == .iosSimulator }.count }
 }

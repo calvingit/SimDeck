@@ -35,6 +35,8 @@ struct SettingsView: View {
                 appearanceSection
                 Divider()
                 languageSection
+                Divider()
+                aboutSection
             }
             .padding(22)
         }
@@ -187,6 +189,23 @@ struct SettingsView: View {
             Text(AppLanguage.text("settings.language.restart"))
                 .font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    private var aboutSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(AppLanguage.text("settings.about"), systemImage: "info.circle").font(.headline)
+            infoRow(AppLanguage.text("settings.about.version"), value: appVersion)
+            HStack(spacing: 8) {
+                Text(AppLanguage.text("settings.about.github"))
+                    .frame(width: 92, alignment: .leading)
+                Link("github.com/calvingit/AVDMenuBar",
+                     destination: URL(string: "https://github.com/calvingit/AVDMenuBar")!)
+            }
+        }
+    }
+
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
     }
 
     private func pathRow(

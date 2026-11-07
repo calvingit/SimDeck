@@ -1,6 +1,9 @@
 "settings.language" = "Language";
 "settings.language.system" = "System";
 "settings.language.restart" = "The language changes the next time you open AVD MenuBar.";
+"settings.about" = "About";
+"settings.about.version" = "Version";
+"settings.about.github" = "GitHub";
 "settings.tools" = "Tool Paths";
 "settings.tools.help" = "Leave paths blank to detect SDK tools automatically. Save path changes to apply them.";
 "settings.tools.useAuto" = "Use Auto-Detection";
@@ -178,6 +181,9 @@
 "settings.tools.javaMissing" = "Not found (avdmanager may not run)";
 "device.loading" = "Loading devices…";
 "device.empty" = "No devices found";
+"tab.platform" = "Device platform";
+"tab.android" = "Android (%@)";
+"tab.ios" = "iOS (%@)";
 "preview.liveBadge" = "Live · ADB";
 "preview.pollingBadge" = "Screenshots";
 "key.back" = "Back";

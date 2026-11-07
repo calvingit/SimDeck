@@ -38,6 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.statusController.showPanel()
             }
         }
+        if CommandLine.arguments.contains("--show-main") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.showMain()
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

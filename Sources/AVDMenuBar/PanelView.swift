@@ -6,6 +6,20 @@ struct AVDPanelView: View {
     @ObservedObject var pinned: PanelState
     let actions: PanelActions
 
+    @State private var explicitPlatform: DeviceEntry.Platform?
+
+    /// 当前平台标签：未手动选择时按设备情况给默认值（只有 iOS 模拟器时落在 iOS）。
+    private var activePlatform: DeviceEntry.Platform {
+        explicitPlatform ?? .initialSelection(for: model.deviceEntries)
+    }
+
+    private var platformBinding: Binding<DeviceEntry.Platform> {
+        Binding(
+            get: { activePlatform },
+            set: { explicitPlatform = $0 }
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -93,7 +107,9 @@ struct AVDPanelView: View {
                     }
                     .padding(.bottom, 4)
                 }
-                let entries = model.deviceEntries
+                DevicePlatformPicker(entries: model.deviceEntries, selection: platformBinding)
+                    .padding(.bottom, 2)
+                let entries = model.deviceEntries.filter { $0.platform == activePlatform }
                 DeviceGroups(entries: entries) { entry in
                     HStack(spacing: 8) {
                         Button {
@@ -181,16 +197,6 @@ struct AVDPanelView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Button(action: actions.create) {
-                Label(AppLanguage.text("avd.create.title"), systemImage: "plus")
-            }
-            .buttonStyle(.borderless)
-
-            Button(action: actions.createSimulator) {
-                Label(AppLanguage.text("ios.create.title"), systemImage: "iphone")
-            }
-            .buttonStyle(.borderless)
-
             Spacer()
 
             Button(action: actions.openMain) {

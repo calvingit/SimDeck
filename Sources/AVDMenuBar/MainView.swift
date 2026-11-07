@@ -7,9 +7,26 @@ struct MainView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var touchStartDate: Date?
+    @State private var explicitPlatform: DeviceEntry.Platform?
+
+    /// 当前平台标签：未手动选择时按设备情况给默认值（只有 iOS 模拟器时落在 iOS）。
+    private var activePlatform: DeviceEntry.Platform {
+        explicitPlatform ?? .initialSelection(for: model.deviceEntries)
+    }
+
+    private var visibleEntries: [DeviceEntry] {
+        model.deviceEntries.filter { $0.platform == activePlatform }
+    }
+
+    private var platformBinding: Binding<DeviceEntry.Platform> {
+        Binding(
+            get: { activePlatform },
+            set: { explicitPlatform = $0 }
+        )
+    }
 
     private var selected: DeviceEntry? {
-        let entries = model.deviceEntries
+        let entries = visibleEntries
         return entries.first { $0.id == model.selectedDeviceID }
             ?? entries.first { $0.status == .running }
             ?? entries.first { $0.status == .starting }
@@ -46,6 +63,12 @@ struct MainView: View {
         .onChange(of: selectedRunning) { _, _ in updatePreview() }
         // iOS 设备没有 RunningEmulator，状态流转（Booting→Booted 等）靠状态标题变化触发。
         .onChange(of: selected?.statusTitle) { _, _ in updatePreview() }
+        // 面板等其他入口选中另一平台设备时，列表跟随切到对应平台。
+        .onChange(of: model.selectedDeviceID) { _, newID in
+            if let entry = model.deviceEntries.first(where: { $0.id == newID }) {
+                explicitPlatform = entry.platform
+            }
+        }
     }
 
     private func updatePreview() {
@@ -64,22 +87,27 @@ struct MainView: View {
             HStack {
                 Text(AppLanguage.text("field.device")).font(.headline)
                 Spacer()
-                Text(model.deviceEntries.count.formatted())
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                createMenu
             }
             .padding(12)
+            DevicePlatformPicker(entries: model.deviceEntries, selection: platformBinding)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
             Divider()
-            if model.deviceEntries.isEmpty {
-                Text(model.isRefreshing ? AppLanguage.text("device.loading") : AppLanguage.text("device.empty"))
+            if visibleEntries.isEmpty {
+                Text(emptyListMessage)
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: Binding(
                     get: { selected?.id },
                     set: { model.selectedDeviceID = $0 }
                 )) {
-                    DeviceGroups(entries: model.deviceEntries) { entry in
+                    DeviceGroups(entries: visibleEntries) { entry in
                         DeviceIdentity(entry: entry)
                             .padding(.vertical, 3)
                             .tag(entry.id)
@@ -88,6 +116,32 @@ struct MainView: View {
                 .listStyle(.sidebar)
             }
         }
+    }
+
+    /// 空列表文案：刷新中优先；当前平台加载失败时显示原因，避免空标签误导。
+    private var emptyListMessage: String {
+        if model.isRefreshing { return AppLanguage.text("device.loading") }
+        switch activePlatform {
+        case .iosSimulator:
+            if let error = model.iosError { return error }
+        case .android:
+            if let error = model.listError { return error }
+        }
+        return AppLanguage.text("device.empty")
+    }
+
+    /// 侧栏头部的「+」菜单：承接原面板底栏的创建 AVD / 新建 iOS 模拟器入口。
+    private var createMenu: some View {
+        Menu {
+            Button(AppLanguage.text("avd.create.title")) { actions.create() }
+            Button(AppLanguage.text("ios.create.title")) { actions.createSimulator() }
+        } label: {
+            Image(systemName: "plus.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel(AppLanguage.text("action.create"))
+        .help(AppLanguage.text("action.create"))
     }
 
     private var previewArea: some View {

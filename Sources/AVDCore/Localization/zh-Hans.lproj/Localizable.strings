@@ -1,6 +1,9 @@
 "settings.language" = "语言";
 "settings.language.system" = "跟随系统";
 "settings.language.restart" = "退出并重新打开 AVD MenuBar 后生效。";
+"settings.about" = "关于";
+"settings.about.version" = "版本";
+"settings.about.github" = "GitHub 地址";
 "settings.tools" = "工具路径";
 "settings.tools.help" = "留空时自动检测 SDK 工具。路径更改须保存后才会生效。";
 "settings.tools.useAuto" = "使用自动检测";
@@ -178,6 +181,9 @@
 "settings.tools.javaMissing" = "未找到（avdmanager 可能无法运行）";
 "device.loading" = "正在读取设备…";
 "device.empty" = "未发现设备";
+"tab.platform" = "设备平台";
+"tab.android" = "Android (%@)";
+"tab.ios" = "iOS (%@)";
 "preview.liveBadge" = "实时 · ADB";
 "preview.pollingBadge" = "轮播";
 "key.back" = "返回";
