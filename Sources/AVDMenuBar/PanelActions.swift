@@ -41,4 +41,5 @@ struct PanelActions {
     var deleteSimulator: (SimulatorDevice) -> Void
     var renameSimulator: (SimulatorDevice) -> Void
     var createSimulator: () -> Void
+    var screenshotSimulator: (SimulatorDevice) -> Void
 }

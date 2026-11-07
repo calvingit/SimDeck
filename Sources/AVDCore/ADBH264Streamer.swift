@@ -1,12 +1,9 @@
-import AVFoundation
-import CoreImage
-import CoreMedia
-import CoreVideo
+import Combine
+import CoreGraphics
 import Foundation
-import VideoToolbox
 
 /// 通过 `adb exec-out screenrecord --output-format=h264 -` 获取设备实时 H.264 流，
-/// 解析 Annex-B NAL 后交给 VideoToolbox 硬解，输出 CGImage 帧（~30fps）。
+/// 解析 Annex-B NAL 后交给共用的 VideoToolboxDecoder 硬解，输出 CGImage 帧（~30fps）。
 ///
 /// 注意：Android screenrecord 默认有时长上限（约 3 分钟），到达后进程退出，
 /// 这里会自动重新连接；3 分钟内的帧没有中断。
@@ -32,20 +29,17 @@ public final class ADBH264Streamer: NSObject {
     private var wantsStream = false
     private var startedAt: Date?
     private var restartWorkItem: DispatchWorkItem?
-    private var frameIndex: Int64 = 0
     private var process: Process?
     private var pipe: Pipe?
 
     private let parserQueue = DispatchQueue(label: "local.avdmenubar.h264.parser")
-    private let ciContext = CIContext(options: [.cacheIntermediates: false])
 
     // 以下解码状态仅在 parserQueue 上访问。
     private var parser = H264AnnexBParser()
     private var sps: Data?
     private var pps: Data?
     private var formatDirty = false
-    private var formatDescription: CMVideoFormatDescription?
-    private var decompressionSession: VTDecompressionSession?
+    private let decoder = VideoToolboxDecoder()
 
     public static func makeArguments(serial: String) -> [String] {
         ["-s", serial, "exec-out", "screenrecord", "--output-format=h264", "-"]
@@ -53,6 +47,19 @@ public final class ADBH264Streamer: NSObject {
 
     public var isRunning: Bool {
         process?.isRunning == true && wantsStream
+    }
+
+    override public init() {
+        super.init()
+        decoder.onFrame = { [weak self] image, size in
+            guard let self else { return }
+            self.frame = image
+            self.frameSize = size
+            self.onFrame?(image, size)
+            if case .starting = self.state {
+                self.setState(.active)
+            }
+        }
     }
 
     public func start(serial: String, adb: URL, environment: [String: String]) {
@@ -186,12 +193,10 @@ public final class ADBH264Streamer: NSObject {
     }
 
     private func enqueueSlice(_ nal: Data) {
-        if formatDirty || decompressionSession == nil {
+        if formatDirty || !decoder.isConfigured {
             guard let sps, let pps else { return }
             do {
-                let (format, size) = try makeFormatDescription(sps: sps, pps: pps)
-                rebuildSession(format: format)
-                formatDescription = format
+                let size = try decoder.configure(parameterSets: [sps, pps])
                 formatDirty = false
                 let sizeCopy = size
                 DispatchQueue.main.async { self.frameSize = sizeCopy }
@@ -200,116 +205,12 @@ public final class ADBH264Streamer: NSObject {
                 return
             }
         }
-        guard let format = formatDescription, let session = decompressionSession else { return }
-
-        let avcc = Self.lengthPrefixed(nal)
-        guard let sample = Self.makeSample(avcc: avcc, format: format, index: frameIndex) else {
-            return
-        }
-        let status = VTDecompressionSessionDecodeFrame(
-            session,
-            sampleBuffer: sample,
-            flags: [],
-            infoFlagsOut: nil,
-            completionHandler: { [weak self] status, infoFlags, imageBuffer, _, _, _ in
-                self?.handleDecodedFrame(
-                    status: status,
-                    infoFlags: infoFlags,
-                    imageBuffer: imageBuffer
-                )
-            }
-        )
-        if status == noErr {
-            frameIndex += 1
-        } else {
-            teardownDecoderLocked()
-        }
-    }
-
-    private func makeFormatDescription(sps: Data, pps: Data) throws -> (CMVideoFormatDescription, CGSize) {
-        // 新 SDK 要求传裸 NAL（不带 AVCC 长度前缀），nalUnitHeaderLength 仅约束后续 sample。
-        let spsArray = [UInt8](sps)
-        let ppsArray = [UInt8](pps)
-        var format: CMVideoFormatDescription?
-        var size = CGSize.zero
-
-        let status = spsArray.withUnsafeBufferPointer { spsBuffer in
-            ppsArray.withUnsafeBufferPointer { ppsBuffer in
-                var pointers: [UnsafePointer<UInt8>] = [
-                    spsBuffer.baseAddress!,
-                    ppsBuffer.baseAddress!
-                ]
-                var sizes: [Int] = [spsArray.count, ppsArray.count]
-                let result = CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                    allocator: kCFAllocatorDefault,
-                    parameterSetCount: 2,
-                    parameterSetPointers: &pointers,
-                    parameterSetSizes: &sizes,
-                    nalUnitHeaderLength: 4,
-                    formatDescriptionOut: &format
-                )
-                return result
-            }
-        }
-        guard status == noErr, let format else {
-            throw NSError(
-                domain: "AVDMenuBar.h264",
-                code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: AppLanguage.text("stream.parameterSetFailed", String(status))]
-            )
-        }
-        let dims = CMVideoFormatDescriptionGetDimensions(format)
-        size = CGSize(width: Double(dims.width), height: Double(dims.height))
-        return (format, size)
-    }
-
-    private func rebuildSession(format: CMVideoFormatDescription) {
-        if let session = decompressionSession {
-            VTDecompressionSessionWaitForAsynchronousFrames(session)
-            VTDecompressionSessionInvalidate(session)
-        }
-        decompressionSession = nil
-
-        var session: VTDecompressionSession?
-        let status = VTDecompressionSessionCreate(
-            allocator: kCFAllocatorDefault,
-            formatDescription: format,
-            decoderSpecification: nil,
-            imageBufferAttributes: nil,
-            decompressionSessionOut: &session
-        )
-        guard status == noErr, let session else { return }
-        decompressionSession = session
-    }
-
-    func handleDecodedFrame(
-        status: OSStatus,
-        infoFlags: VTDecodeInfoFlags,
-        imageBuffer: CVImageBuffer?
-    ) {
-
-        guard status == noErr,
-              !infoFlags.contains(.frameDropped),
-              let imageBuffer else {
-            return
-        }
-        CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly) }
-
-        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
-        let size = CGSize(
-            width: CVPixelBufferGetWidth(imageBuffer),
-            height: CVPixelBufferGetHeight(imageBuffer)
-        )
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.frame = cgImage
-            self.frameSize = size
-            self.onFrame?(cgImage, size)
-            if case .starting = self.state {
-                self.setState(.active)
-            }
+        if !decoder.decode(avcc: Self.lengthPrefixed(nal)) {
+            // 解码失败：清空参数集并重建解析器，等待新的 SPS/PPS
+            sps = nil
+            pps = nil
+            formatDirty = false
+            parser = H264AnnexBParser()
         }
     }
 
@@ -322,12 +223,7 @@ public final class ADBH264Streamer: NSObject {
     }
 
     private func teardownDecoderLocked() {
-        if let session = decompressionSession {
-            VTDecompressionSessionWaitForAsynchronousFrames(session)
-            VTDecompressionSessionInvalidate(session)
-        }
-        decompressionSession = nil
-        formatDescription = nil
+        decoder.invalidate()
         sps = nil
         pps = nil
         formatDirty = false
@@ -349,57 +245,6 @@ public final class ADBH264Streamer: NSObject {
         withUnsafeBytes(of: length) { data.append(contentsOf: $0) }
         data.append(nal)
         return data
-    }
-
-    private static func makeSample(
-        avcc: Data,
-        format: CMVideoFormatDescription,
-        index: Int64
-    ) -> CMSampleBuffer? {
-        var blockBuffer: CMBlockBuffer?
-        let blockStatus = CMBlockBufferCreateWithMemoryBlock(
-            allocator: kCFAllocatorDefault,
-            memoryBlock: nil,
-            blockLength: avcc.count,
-            blockAllocator: nil,
-            customBlockSource: nil,
-            offsetToData: 0,
-            dataLength: avcc.count,
-            flags: 0,
-            blockBufferOut: &blockBuffer
-        )
-        guard blockStatus == kCMBlockBufferNoErr, let blockBuffer else { return nil }
-
-        let replaceStatus = avcc.withUnsafeBytes { raw in
-            CMBlockBufferReplaceDataBytes(
-                with: raw.baseAddress!,
-                blockBuffer: blockBuffer,
-                offsetIntoDestination: 0,
-                dataLength: avcc.count
-            )
-        }
-        guard replaceStatus == kCMBlockBufferNoErr else { return nil }
-
-        var timing = CMSampleTimingInfo(
-            duration: CMTime(value: 1, timescale: 30),
-            presentationTimeStamp: CMTime(value: index, timescale: 30),
-            decodeTimeStamp: .invalid
-        )
-        var sampleSize = avcc.count
-        var sampleBuffer: CMSampleBuffer?
-        let sampleStatus = CMSampleBufferCreateReady(
-            allocator: kCFAllocatorDefault,
-            dataBuffer: blockBuffer,
-            formatDescription: format,
-            sampleCount: 1,
-            sampleTimingEntryCount: 1,
-            sampleTimingArray: &timing,
-            sampleSizeEntryCount: 1,
-            sampleSizeArray: &sampleSize,
-            sampleBufferOut: &sampleBuffer
-        )
-        guard sampleStatus == noErr else { return nil }
-        return sampleBuffer
     }
 }
 

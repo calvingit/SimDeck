@@ -18,6 +18,7 @@ struct MainView: View {
 
     private var selectedRunning: RunningEmulator? { selected?.device }
     private var previewSerial: String? { selectedRunning?.serial }
+    private var previewSimulator: SimulatorDevice? { selected?.simulator }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -43,6 +44,8 @@ struct MainView: View {
         .onDisappear { model.setPreviewVisible(false) }
         .onChange(of: selected?.id) { _, _ in updatePreview() }
         .onChange(of: selectedRunning) { _, _ in updatePreview() }
+        // iOS 设备没有 RunningEmulator，状态流转（Booting→Booted 等）靠状态标题变化触发。
+        .onChange(of: selected?.statusTitle) { _, _ in updatePreview() }
     }
 
     private func updatePreview() {
@@ -50,8 +53,9 @@ struct MainView: View {
         model.setPreviewTarget(
             serial: previewSerial,
             avdName: selected?.avd?.name ?? selectedRunning?.avdName,
-            booted: selectedRunning?.isBooted == true,
-            isRealDevice: selectedRunning?.isRealDevice == true
+            booted: selectedRunning?.isBooted == true || previewSimulator?.isBooted == true,
+            isRealDevice: selectedRunning?.isRealDevice == true,
+            simulator: previewSimulator
         )
     }
 
@@ -113,7 +117,7 @@ struct MainView: View {
                     }
                 }
 
-                if fitRect != nil && previewSerial != nil {
+                if fitRect != nil && (previewSerial != nil || previewSimulator != nil) {
                     let badge = pipelineBadge
                     VStack {
                         HStack {
@@ -158,6 +162,8 @@ struct MainView: View {
         switch model.previewPipeline {
         case .adbStream: return (AppLanguage.text("preview.liveBadge"), .green)
         case .polling: return (AppLanguage.text("preview.pollingBadge"), .orange)
+        case .iosStream: return (AppLanguage.text("ios.preview.liveBadge"), .green)
+        case .iosPolling: return (AppLanguage.text("preview.pollingBadge"), .orange)
         }
     }
 
@@ -304,7 +310,10 @@ struct MainView: View {
 
     private var previewMessage: String {
         guard let selected else { return AppLanguage.text("preview.selectDevice") }
-        if selected.platform == .iosSimulator { return AppLanguage.text("ios.previewUnavailable") }
+        if selected.platform == .iosSimulator {
+            if selected.status == .stopped { return AppLanguage.text("ios.preview.startFirst") }
+            return model.previewStatus ?? AppLanguage.text("preview.connecting")
+        }
         if selected.status == .starting { return AppLanguage.text("preview.starting") }
         if selected.status == .stopped { return AppLanguage.text("preview.startAVD") }
         if selectedRunning?.isBooted != true { return AppLanguage.text("preview.waitingForDevice") }
@@ -421,6 +430,8 @@ struct MainView: View {
 
     private func iosManagementMenu(_ simulator: SimulatorDevice) -> some View {
         Menu {
+            Button(AppLanguage.text("action.screenshot")) { actions.screenshotSimulator(simulator) }
+                .disabled(!simulator.isBooted)
             Button(AppLanguage.text("ios.menu.rename")) { actions.renameSimulator(simulator) }
             Divider()
             // erase/delete 运行中可用（erase 由服务层先关机），无需先停用。

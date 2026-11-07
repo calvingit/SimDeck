@@ -239,7 +239,9 @@
 "details.sdcard" = "SD Card: %@";
 
 "ios.unavailable" = "Unavailable";
-"ios.previewUnavailable" = "iOS simulator preview is not available yet.";
+"ios.preview.connecting" = "Connecting to the simulator…";
+"ios.preview.startFirst" = "Start the simulator to see its screen";
+"ios.preview.liveBadge" = "Live · baguette";
 "panel.iosError" = "Could Not Load iOS Simulators";
 "panel.iosCount" = " · iOS: %@";
 "ios.startFailed" = "Could not start %@";

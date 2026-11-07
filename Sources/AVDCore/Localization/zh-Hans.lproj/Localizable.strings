@@ -239,7 +239,9 @@
 "details.sdcard" = "SD 卡：%@";
 
 "ios.unavailable" = "不可用";
-"ios.previewUnavailable" = "iOS 模拟器预览暂未提供。";
+"ios.preview.connecting" = "正在连接模拟器…";
+"ios.preview.startFirst" = "启动模拟器后显示屏幕预览";
+"ios.preview.liveBadge" = "实时 · baguette";
 "panel.iosError" = "无法读取 iOS 模拟器";
 "panel.iosCount" = " · iOS：%@";
 "ios.startFailed" = "启动 %@ 失败";

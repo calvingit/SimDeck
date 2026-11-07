@@ -92,7 +92,8 @@ final class AppCoordinator {
             eraseSimulator: { [weak self] device in self?.confirmEraseSimulator(device) },
             deleteSimulator: { [weak self] device in self?.confirmDeleteSimulator(device) },
             renameSimulator: { [weak self] device in self?.promptRenameSimulator(device) },
-            createSimulator: { [weak self] in self?.promptCreateSimulator() }
+            createSimulator: { [weak self] in self?.promptCreateSimulator() },
+            screenshotSimulator: { [weak self] device in self?.takeSimulatorScreenshot(device) }
         )
     }
 
@@ -536,6 +537,17 @@ final class AppCoordinator {
 
     private func takeScreenshot(device: RunningEmulator, avd: AVD?) {
         model.screenshot(device: device, avd: avd) { result in
+            switch result {
+            case .success(let url):
+                NSWorkspace.shared.open(url)
+            case .failure(let error):
+                Alerts.error(AppLanguage.text("screenshot.failed"), error.localizedDescription)
+            }
+        }
+    }
+
+    private func takeSimulatorScreenshot(_ device: SimulatorDevice) {
+        model.screenshot(simulator: device) { result in
             switch result {
             case .success(let url):
                 NSWorkspace.shared.open(url)

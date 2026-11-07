@@ -6,6 +6,8 @@ import AVDCore
 enum PreviewPipeline: Equatable {
     case adbStream
     case polling
+    case iosStream
+    case iosPolling
 }
 
 /// 创建 iOS 模拟器所需的候选缺失时抛出。
@@ -65,6 +67,8 @@ final class AppModel: ObservableObject {
     private var simctl: SimctlService?
     private var simulatorMonitor: SimulatorMonitor?
     let adbStreamer = ADBH264Streamer()
+    let baguetteStreamer = BaguetteController()
+    private var baguetteURL: URL?
 
     @Published private(set) var avds: [AVD] = []
     @Published private(set) var running: [RunningEmulator] = []
@@ -101,6 +105,14 @@ final class AppModel: ObservableObject {
         adbStreamer.$state
             .receive(on: RunLoop.main)
             .sink { [weak self] state in self?.handleStreamState(state) }
+            .store(in: &cancellables)
+        baguetteStreamer.$frame
+            .receive(on: RunLoop.main)
+            .sink { [weak self] image in self?.previewFrame = image }
+            .store(in: &cancellables)
+        baguetteStreamer.$state
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in self?.handleBaguetteStreamState(state) }
             .store(in: &cancellables)
     }
 
@@ -182,6 +194,7 @@ final class AppModel: ObservableObject {
         let service = SimctlService(simctl: simctlURL)
         simctl = service
         simulatorMonitor = SimulatorMonitor(simctl: service)
+        baguetteURL = BaguetteController.locateBinary()
     }
 
     private func installTools(_ resolved: ToolPaths) {
@@ -900,6 +913,35 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// iOS 模拟器截图：与 Android 截图同款命名规则，保存到桌面（无桌面时用户目录）。
+    func screenshot(
+        simulator: SimulatorDevice,
+        completion: @escaping (Result<URL, Error>) -> Void
+    ) {
+        guard let simctl else { return }
+        let files = FileManager.default
+        let desktop = files.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
+        let directory = files.fileExists(atPath: desktop.path)
+            ? desktop
+            : files.homeDirectoryForCurrentUser
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
+        let baseName = simulator.name.replacingOccurrences(of: "/", with: "_")
+        let output = directory.appendingPathComponent("\(baseName)-\(formatter.string(from: Date())).png")
+
+        queue.async {
+            do {
+                let data = try simctl.screenshot(udid: simulator.udid)
+                try data.write(to: output)
+                DispatchQueue.main.async { completion(.success(output)) }
+            } catch {
+                try? FileManager.default.removeItem(at: output)
+                DispatchQueue.main.async { completion(.failure(error)) }
+            }
+        }
+    }
+
     // MARK: - 系统按键
 
     func sendKey(serial: String, keycode: Int) {
@@ -998,10 +1040,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var previewPipeline: PreviewPipeline = .adbStream
     private var adbFailureCount = 0
     private var adbStreamStartedAt: Date?
+    private var iosFailureCount = 0
+    private var iosStreamStartedAt: Date?
+    private var iosRestartWorkItem: DispatchWorkItem?
     private var previewBooted = false
     private var previewIsRealDevice = false
     private static let previewInterval: TimeInterval = 1.5
     private var previewSerial: String?
+    private var previewUDID: String?
     private var previewAVDName: String?
     private var previewTimer: Timer?
     private var previewInFlight = false
@@ -1009,32 +1055,55 @@ final class AppModel: ObservableObject {
     private var firstFrameTimeout: DispatchWorkItem?
     private var previewVisible = false
 
-    /// 主界面左侧选中项变化时更新预览目标；serial 为 nil 表示没有运行中的实例。
-    /// 真机（isRealDevice）没有 SCK 窗口捕获，降级直接走截屏轮播。
-    func setPreviewTarget(serial: String?, avdName: String?, booted: Bool, isRealDevice: Bool) {
-        if serial != previewSerial || booted != previewBooted {
+    /// 主界面左侧选中项变化时更新预览目标；serial 与 udid 均为 nil 表示没有运行中的实例。
+    /// Android 真机（isRealDevice）没有 SCK 窗口捕获，降级直接走截屏轮播；
+    /// iOS 模拟器选中时增强档（baguette）优先，失败降级截图轮询。
+    func setPreviewTarget(
+        serial: String?,
+        avdName: String?,
+        booted: Bool,
+        isRealDevice: Bool,
+        simulator: SimulatorDevice? = nil
+    ) {
+        let udid = simulator?.udid
+        if serial != previewSerial || udid != previewUDID || booted != previewBooted {
             previewGeneration += 1
             firstFrameTimeout?.cancel()
+            iosRestartWorkItem?.cancel()
             adbStreamer.stop()
+            baguetteStreamer.stop()
             previewSerial = serial
             previewAVDName = avdName
+            previewUDID = udid
             previewBooted = booted
             previewIsRealDevice = isRealDevice
             previewImage = nil
             previewFrame = nil
-            previewStatus = serial == nil
+            previewStatus = serial == nil && udid == nil
                 ? AppLanguage.text("preview.noRunningDevice")
-                : (booted ? AppLanguage.text("preview.connectingADB") : AppLanguage.text("preview.waitingForFrame"))
+                : (booted
+                    ? AppLanguage.text(simulator != nil ? "ios.preview.connecting" : "preview.connectingADB")
+                    : AppLanguage.text("preview.waitingForFrame"))
             deviceResolution = nil
             adbFailureCount = 0
-            // 真机无 SCK 窗口捕获；模拟器未开机时 ADB 流也不可用，
-            // 两者失败后统一降级为截屏轮播，因此初始管线一律走 ADB 流。
-            setPreviewPipeline(.adbStream)
+            iosFailureCount = 0
+            if simulator != nil {
+                setPreviewPipeline(enhancedTierIsAvailable ? .iosStream : .iosPolling)
+            } else {
+                // 真机无 SCK 窗口捕获；模拟器未开机时 ADB 流也不可用，
+                // 两者失败后统一降级为截屏轮播，因此初始管线一律走 ADB 流。
+                setPreviewPipeline(.adbStream)
+            }
             if let serial {
                 refreshDeviceResolution(serial: serial)
             }
         }
         applyPreviewPipeline()
+    }
+
+    /// 增强档可用性：baguette 二进制已找到且满足 macOS 15+/arm64 门槛（设计决策 2）。
+    private var enhancedTierIsAvailable: Bool {
+        baguetteURL != nil && BaguetteController.isEnhancedTierSupported()
     }
 
     /// 主界面打开/关闭时控制预览开关。
@@ -1045,7 +1114,9 @@ final class AppModel: ObservableObject {
         } else {
             previewGeneration += 1
             firstFrameTimeout?.cancel()
+            iosRestartWorkItem?.cancel()
             adbStreamer.stop()
+            baguetteStreamer.stop()
             previewFrame = nil
             previewImage = nil
             previewTimer?.invalidate()
@@ -1063,40 +1134,71 @@ final class AppModel: ObservableObject {
         applyPreviewPipeline()
     }
 
-    /// 按当前管线启动对应预览源；ADB 实时流失败次数过多时降级链：
-    /// adbStream → sck → polling。
+    /// 按当前管线启动对应预览源。降级链：
+    /// Android adbStream → polling；iOS iosStream（baguette）→ iosPolling（simctl 截图）。
     private func applyPreviewPipeline() {
-        guard previewVisible, previewBooted, let serial = previewSerial, let tools, let adb = tools.adb else {
-            adbStreamer.stop()
-            previewStatus = tools?.adb == nil ? AppLanguage.text("tools.adbMissing") : previewStatus
-            schedulePreview()
-            return
-        }
         switch previewPipeline {
         case .adbStream:
-            if !adbStreamer.isRunning {
-                adbStreamStartedAt = Date()
-                adbStreamer.start(
-                    serial: serial,
-                    adb: adb,
-                    environment: ToolEnvironment.make(tools: tools)
-                )
-                firstFrameTimeout?.cancel()
-                let generation = previewGeneration
-                let timeout = DispatchWorkItem { [weak self] in
-                    guard let self, self.previewGeneration == generation,
-                          self.previewFrame == nil, self.previewPipeline == .adbStream else { return }
-                    self.previewStatus = AppLanguage.text("preview.fallbackToScreenshots")
-                    self.setPreviewPipeline(.polling)
-                }
-                firstFrameTimeout = timeout
-                DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: timeout)
+            guard previewVisible, previewBooted, let serial = previewSerial, let tools, let adb = tools.adb else {
+                adbStreamer.stop()
+                previewStatus = tools?.adb == nil ? AppLanguage.text("tools.adbMissing") : previewStatus
+                schedulePreview()
+                return
             }
-        case .polling:
+            startADBStream(serial: serial, adb: adb)
+        case .iosStream:
+            guard previewVisible, previewBooted, let udid = previewUDID, let baguette = baguetteURL,
+                  BaguetteController.isEnhancedTierSupported() else {
+                baguetteStreamer.stop()
+                schedulePreview()
+                return
+            }
+            startIOSStream(udid: udid, baguette: baguette)
+        case .polling, .iosPolling:
             firstFrameTimeout?.cancel()
             adbStreamer.stop()
+            baguetteStreamer.stop()
         }
         schedulePreview()
+    }
+
+    private func startADBStream(serial: String, adb: URL) {
+        guard let tools else { return }
+        if !adbStreamer.isRunning {
+            adbStreamStartedAt = Date()
+            adbStreamer.start(
+                serial: serial,
+                adb: adb,
+                environment: ToolEnvironment.make(tools: tools)
+            )
+            firstFrameTimeout?.cancel()
+            let generation = previewGeneration
+            let timeout = DispatchWorkItem { [weak self] in
+                guard let self, self.previewGeneration == generation,
+                      self.previewFrame == nil, self.previewPipeline == .adbStream else { return }
+                self.previewStatus = AppLanguage.text("preview.fallbackToScreenshots")
+                self.setPreviewPipeline(.polling)
+            }
+            firstFrameTimeout = timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: timeout)
+        }
+    }
+
+    private func startIOSStream(udid: String, baguette: URL) {
+        if !baguetteStreamer.isRunning {
+            iosStreamStartedAt = Date()
+            baguetteStreamer.start(udid: udid, baguette: baguette)
+            firstFrameTimeout?.cancel()
+            let generation = previewGeneration
+            let timeout = DispatchWorkItem { [weak self] in
+                guard let self, self.previewGeneration == generation,
+                      self.previewFrame == nil, self.previewPipeline == .iosStream else { return }
+                self.previewStatus = AppLanguage.text("preview.fallbackToScreenshots")
+                self.setPreviewPipeline(.iosPolling)
+            }
+            firstFrameTimeout = timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: timeout)
+        }
     }
 
     private func handleStreamState(_ state: ADBH264Streamer.StreamState) {
@@ -1122,13 +1224,48 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func handleBaguetteStreamState(_ state: BaguetteController.StreamState) {
+        guard previewVisible, previewBooted, previewPipeline == .iosStream else { return }
+        switch state {
+        case .active:
+            iosFailureCount = 0
+            previewStatus = nil
+        case .ended(let reason):
+            let ran = iosStreamStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+            if ran < 5 {
+                iosFailureCount += 1
+            } else {
+                iosFailureCount = 0
+            }
+            previewStatus = reason
+            // 首帧失败 1 次延迟重启（与 ADB 流一致），连续两次快速失败降级到截图轮询
+            if iosFailureCount >= 2 {
+                setPreviewPipeline(.iosPolling)
+            } else {
+                iosRestartWorkItem?.cancel()
+                let generation = previewGeneration
+                let restart = DispatchWorkItem { [weak self] in
+                    guard let self, self.previewGeneration == generation,
+                          self.previewPipeline == .iosStream else { return }
+                    self.applyPreviewPipeline()
+                }
+                iosRestartWorkItem = restart
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: restart)
+            }
+        case .starting, .idle:
+            break
+        }
+    }
+
     private func schedulePreview() {
         previewTimer?.invalidate()
         previewTimer = nil
         guard previewVisible,
-              previewSerial != nil, previewBooted,
-              previewPipeline == .polling,
-              !adbStreamer.isRunning else { return }
+              previewSerial != nil || previewUDID != nil,
+              previewBooted,
+              previewPipeline == .polling || previewPipeline == .iosPolling,
+              !adbStreamer.isRunning,
+              !baguetteStreamer.isRunning else { return }
         let timer = Timer(timeInterval: Self.previewInterval, repeats: false) { [weak self] _ in
             self?.capturePreviewFrame()
         }
@@ -1137,8 +1274,19 @@ final class AppModel: ObservableObject {
     }
 
     private func capturePreviewFrame() {
-        guard previewVisible, !previewInFlight,
-              let serial = previewSerial,
+        guard previewVisible, !previewInFlight, previewBooted else { return }
+        switch previewPipeline {
+        case .polling:
+            captureAndroidPreviewFrame()
+        case .iosPolling:
+            captureSimulatorPreviewFrame()
+        case .adbStream, .iosStream:
+            break
+        }
+    }
+
+    private func captureAndroidPreviewFrame() {
+        guard let serial = previewSerial,
               let adb = tools?.adb else { return }
         previewInFlight = true
         let generation = previewGeneration
@@ -1168,6 +1316,34 @@ final class AppModel: ObservableObject {
                     throw CommandRunnerError.nonZero(status: result.status, stderr: result.failureDetail)
                 }
                 guard let image = NSImage(contentsOf: output) else {
+                    throw CommandRunnerError.nonZero(status: 1, stderr: AppLanguage.text("preview.invalidFrame"))
+                }
+                finish(image, nil)
+            } catch {
+                finish(nil, error.localizedDescription)
+            }
+        }
+    }
+
+    /// iOS 轮询：`io screenshot -` 不能输出 stdout（实测约束），SimctlService 写临时文件后读回。
+    private func captureSimulatorPreviewFrame() {
+        guard let udid = previewUDID, let simctl else { return }
+        previewInFlight = true
+        let generation = previewGeneration
+        queue.async { [weak self] in
+            let finish: (NSImage?, String?) -> Void = { image, status in
+                DispatchQueue.main.async {
+                    self?.previewInFlight = false
+                    if self?.previewGeneration == generation {
+                        self?.previewImage = image
+                        self?.previewStatus = status
+                    }
+                    self?.schedulePreview()
+                }
+            }
+            do {
+                let data = try simctl.screenshot(udid: udid)
+                guard let image = NSImage(data: data) else {
                     throw CommandRunnerError.nonZero(status: 1, stderr: AppLanguage.text("preview.invalidFrame"))
                 }
                 finish(image, nil)
