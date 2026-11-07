@@ -272,3 +272,17 @@
 "ios.delete.confirmTitle" = "删除 “%@”？";
 "ios.delete.confirmMessage" = "将删除该模拟器，此操作不可恢复。\n\n名称：%@\nUDID：%@";
 "ios.delete.dataPath" = "数据目录：%@";
+"ios.key.home" = "主屏幕";
+"ios.key.lock" = "锁定";
+"ios.key.volumeUp" = "音量＋";
+"ios.key.volumeDown" = "音量−";
+"ios.input.basicTierNotice" = "触摸与硬件按键需要增强档（内嵌 baguette，macOS 15+ 且 Apple Silicon）。";
+"ios.input.gestureFailed" = "发送触摸输入失败";
+"ios.input.rejected" = "模拟器拒绝了输入：%@";
+"ios.shadow.banner" = "Device Hub 已接管该模拟器的输入，触摸与按键可能被丢弃。";
+"ios.shadow.action" = "修复输入…";
+"ios.heal.action" = "修复";
+"ios.heal.confirmTitle" = "修复 “%@” 的输入？";
+"ios.heal.confirmMessage" = "修复会重启 SpringBoard，模拟器上正在运行的 App 会被终止。完成后触摸输入应恢复正常。";
+"ios.heal.failed" = "修复 %@ 的输入失败";
+"ios.baguette.screenMissing" = "无法从 baguette describe-ui 输出读取屏幕尺寸";

@@ -42,4 +42,6 @@ struct PanelActions {
     var renameSimulator: (SimulatorDevice) -> Void
     var createSimulator: () -> Void
     var screenshotSimulator: (SimulatorDevice) -> Void
+    var sendIOSGesture: (SimulatorDevice, IOSGesture) -> Void
+    var healSimulator: (SimulatorDevice) -> Void
 }

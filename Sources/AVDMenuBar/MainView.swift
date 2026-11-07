@@ -155,6 +155,11 @@ struct MainView: View {
                         handleTouch(value: value, elapsedMs: elapsedMs, fitRect: fitRect)
                     }
             )
+            // 双指捏合（触控板）→ baguette pinch；仅 iOS 增强档在 handleIOSPinch 内生效。
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .onEnded { value in handleIOSPinch(magnification: value.magnification) }
+            )
         }
     }
 
@@ -225,6 +230,10 @@ struct MainView: View {
     }
 
     private func handleTouch(value: DragGesture.Value, elapsedMs: Int, fitRect: CGRect) {
+        if selected?.platform == .iosSimulator {
+            handleIOSTouch(value: value, elapsedMs: elapsedMs, fitRect: fitRect)
+            return
+        }
         guard let running = selectedRunning, running.isBooted,
               let frameSize = displayedFrameSize,
               let resolution = model.deviceResolution else {
@@ -270,10 +279,71 @@ struct MainView: View {
         }
     }
 
+    /// iOS 触摸映射：baguette 帧与 simctl 截图都只含屏幕内容（无 Android 捕获的窗口标题栏），
+    /// 预览位置按比例线性映射到 device points；手势编码由 AVDCore 的 IOSGesture 完成。
+    private func handleIOSTouch(value: DragGesture.Value, elapsedMs: Int, fitRect: CGRect) {
+        guard let simulator = selected?.simulator, simulator.isBooted,
+              model.isEnhancedTierAvailable,
+              let screen = model.iosScreenPoints[simulator.udid] else {
+            return
+        }
+        guard let start = mappedIOSPoint(value.startLocation, fitRect: fitRect, screen: screen),
+              let end = mappedIOSPoint(value.location, fitRect: fitRect, screen: screen) else {
+            return
+        }
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let distance = sqrt(dx * dx + dy * dy)
+
+        if distance < screen.width * 0.01 {
+            // 长按用 tap 的持续按压表达（wire duration 单位秒）；短按走默认 50ms。
+            let duration: Double = elapsedMs >= 500 ? 0.8 : 0.05
+            actions.sendIOSGesture(simulator, .tap(
+                x: Int(end.x), y: Int(end.y),
+                width: Int(screen.width), height: Int(screen.height),
+                duration: duration
+            ))
+        } else {
+            actions.sendIOSGesture(simulator, .swipe(
+                startX: Int(start.x), startY: Int(start.y),
+                endX: Int(end.x), endY: Int(end.y),
+                width: Int(screen.width), height: Int(screen.height),
+                duration: Double(elapsedMs) / 1000
+            ))
+        }
+    }
+
+    /// 触控板捏合（双指）→ baguette 双指 pinch：中心取屏幕中心，起始间距 120pt，
+    /// 结束间距按缩放比例换算并夹在屏幕可表达范围内。
+    private func handleIOSPinch(magnification: CGFloat) {
+        guard selected?.platform == .iosSimulator,
+              let simulator = selected?.simulator, simulator.isBooted,
+              model.isEnhancedTierAvailable,
+              let screen = model.iosScreenPoints[simulator.udid] else {
+            return
+        }
+        let base: CGFloat = 120
+        let endSpread = min(max(base * magnification, 20), max(screen.width, screen.height))
+        actions.sendIOSGesture(simulator, .pinch(
+            cx: Int(screen.width / 2), cy: Int(screen.height / 2),
+            startSpread: Int(base), endSpread: Int(endSpread),
+            width: Int(screen.width), height: Int(screen.height)
+        ))
+    }
+
+    private func mappedIOSPoint(_ point: CGPoint, fitRect: CGRect, screen: CGSize) -> CGPoint? {
+        guard fitRect.width > 0, fitRect.height > 0 else { return nil }
+        let x = (point.x - fitRect.minX) / fitRect.width * screen.width
+        let y = (point.y - fitRect.minY) / fitRect.height * screen.height
+        guard x >= 0, y >= 0, x <= screen.width, y <= screen.height else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+
     @ViewBuilder
     private var bottomBar: some View {
-        // iOS 行不显示 Android keycode 按键条（基础档隐藏，增强档在后续阶段接入）。
-        if selected?.platform != .iosSimulator {
+        if selected?.platform == .iosSimulator {
+            iosBottomBar
+        } else {
             HStack(spacing: 14) {
                 keyButton(AppLanguage.text("key.back"), icon: "arrow.uturn.backward", code: 4)
                 keyButton(AppLanguage.text("key.home"), icon: "house", code: 3)
@@ -287,6 +357,76 @@ struct MainView: View {
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity)
         }
+    }
+
+    /// iOS 按键条：增强档显示 Home/Lock/音量（baguette button press）；
+    /// 基础档没有 baguette，隐藏输入控件并说明原因。检测到 Device Hub 影子时先提示修复。
+    @ViewBuilder
+    private var iosBottomBar: some View {
+        VStack(spacing: 0) {
+            if let simulator = selected?.simulator,
+               model.shadowedUDIDs.contains(simulator.udid),
+               selected?.status == .running {
+                shadowBanner(simulator)
+            }
+            if model.isEnhancedTierAvailable {
+                HStack(spacing: 14) {
+                    iosKeyButton(AppLanguage.text("ios.key.home"), icon: "house", key: .home)
+                    iosKeyButton(AppLanguage.text("ios.key.lock"), icon: "lock", key: .lock)
+                    Divider()
+                        .frame(height: 26)
+                    iosKeyButton(AppLanguage.text("ios.key.volumeUp"), icon: "speaker.wave.2", key: .volumeUp)
+                    iosKeyButton(AppLanguage.text("ios.key.volumeDown"), icon: "speaker.wave.1", key: .volumeDown)
+                }
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+            } else {
+                Text(AppLanguage.text("ios.input.basicTierNotice"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func shadowBanner(_ simulator: SimulatorDevice) -> some View {
+        HStack(spacing: 10) {
+            Label(AppLanguage.text("ios.shadow.banner"), systemImage: "exclamationmark.triangle")
+                .font(.callout)
+            Spacer(minLength: 8)
+            Button(AppLanguage.text("ios.shadow.action")) {
+                actions.healSimulator(simulator)
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+    }
+
+    private func iosKeyButton(_ title: String, icon: String, key: IOSKey) -> some View {
+        Button {
+            if let simulator = selected?.simulator {
+                actions.sendIOSGesture(simulator, .key(key))
+            }
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                Text(title)
+                    .font(.system(size: 10))
+            }
+            .frame(width: 56)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(selected?.simulator?.isBooted != true)
+        .help(title)
     }
 
     private func keyButton(_ title: String, icon: String, code: Int) -> some View {

@@ -251,3 +251,271 @@ public final class BaguetteController: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - describe-ui / heal（一次性子进程，同步，在调用方后台队列执行）
+
+/// baguette 输出解析失败；describe-ui 失败由调用方降级（无屏幕尺寸 → 不做触摸映射）。
+public enum BaguetteParseError: LocalizedError, Equatable {
+    case screenMissing
+
+    public var errorDescription: String? {
+        switch self {
+        case .screenMissing:
+            return AppLanguage.text("ios.baguette.screenMissing")
+        }
+    }
+}
+
+extension BaguetteController {
+    public enum HealOutcome: Equatable, Sendable {
+        /// backboardd/SpringBoard 已重启，输入面收回（heal 输出 "Input surface reclaimed"）。
+        case reclaimed
+        /// 设备没有影子，无需处理（heal 输出 "nothing to heal"）。
+        case unshadowed
+    }
+
+    /// `baguette describe-ui --udid <udid>`：解析顶层元素的 `screen` 字段，
+    /// 返回屏幕宽高（device points，设计 §8 实测事实 4——触摸坐标只认 points）。
+    public static func describeScreen(udid: String, baguette: URL) throws -> CGSize {
+        let result = try CommandRunner.run(baguette, ["describe-ui", "--udid", udid], timeout: 15)
+        guard result.status == 0 else {
+            throw CommandRunnerError.nonZero(status: result.status, stderr: result.failureDetail)
+        }
+        return try parseScreenSize(result.stdout)
+    }
+
+    /// describe-ui 顶层 JSON 的 `screen` 字段：`{"width":402,"height":874,…}`（device points）。
+    static func parseScreenSize(_ json: String) throws -> CGSize {
+        guard let data = json.data(using: .utf8),
+              let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let screen = root["screen"] as? [String: Any],
+              let width = (screen["width"] as? NSNumber)?.doubleValue,
+              let height = (screen["height"] as? NSNumber)?.doubleValue,
+              width > 0, height > 0 else {
+            throw BaguetteParseError.screenMissing
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    /// `baguette heal --udid <udid>`：重启 backboardd/SpringBoard 收回输入面（约 4 秒，
+    /// **会杀掉运行中的 App**——调用方必须先取得用户确认，或处于设备刚由本 app 启动的场景）。
+    /// Outcome 的 summary 走 stderr 日志；同时检查 stdout 以防版本差异。
+    @discardableResult
+    public static func heal(udid: String, baguette: URL) throws -> HealOutcome {
+        let result = try CommandRunner.run(baguette, ["heal", "--udid", udid], timeout: 60)
+        guard result.status == 0 else {
+            throw CommandRunnerError.nonZero(status: result.status, stderr: result.failureDetail)
+        }
+        let output = result.stdout + "\n" + result.stderr
+        return output.contains("Input surface reclaimed") ? .reclaimed : .unshadowed
+    }
+}
+
+// MARK: - input 常驻会话
+
+/// baguette `input` 常驻会话：每设备一个子进程（启动约 1s，另有首个手势的 HID warm-up）。
+/// stdin 写 IOSGesture JSON 行，stdout 逐行回 ack（`{"ok":true}` / `{"ok":false,"error":…}`）。
+/// baguette 启动时若检测到 Device Hub 影子接管，会在 stderr 打印一次建议 heal 的警告
+/// （设计 §8 实测事实 3），这里解析后经 onShadowAdvice 上报，notifyutil 由调用方二次确认。
+/// 公开状态与回调仅在主线程访问；send 亦在主线程调用。
+public final class BaguetteInputSession: @unchecked Sendable {
+    public struct Ack: Equatable, Sendable {
+        public let ok: Bool
+        public let error: String?
+    }
+
+    /// 主线程回调：每条 ack。ok=false 时 error 为 baguette 的原始错误串（如 "missing field: width"）。
+    public var onAck: ((Ack) -> Void)?
+    /// 主线程回调：stderr 出现 Device Hub 影子警告（每次会话至多一次）。
+    public var onShadowAdvice: (() -> Void)?
+    /// 主线程回调：会话进程退出；reason 为 nil 表示干净退出（stdin 关闭 / 退出码 0）。
+    public var onEnded: ((String?) -> Void)?
+
+    /// 当前服务的设备；stop 后为 nil。主线程访问。
+    public private(set) var udid: String?
+
+    private var process: Process?
+    private var stdinHandle: FileHandle?
+    private var stdoutPipe: Pipe?
+    private var stderrPipe: Pipe?
+
+    /// stdout 半行缓冲，仅在 stdout readabilityHandler 上访问。
+    private var stdoutBuffer = Data()
+    /// 影子警告只上报一次，仅在 stderr readabilityHandler 上访问。
+    private var shadowAdviceReported = false
+    /// stderr 半行缓冲，仅在 stderr readabilityHandler 上访问。
+    private var stderrLineBuffer = Data()
+    /// 最近 stderr 行，仅主线程访问（异常退出时作为 ended 原因）。
+    private var stderrLines: [String] = []
+
+    public init() {}
+
+    public var isRunning: Bool { process?.isRunning == true }
+
+    public static func makeInputArguments(udid: String) -> [String] {
+        ["input", "--udid", udid]
+    }
+
+    public func start(udid: String, baguette: URL) {
+        stop()
+
+        let process = Process()
+        process.executableURL = baguette
+        process.arguments = Self.makeInputArguments(udid: udid)
+
+        let stdinPipe = Pipe()
+        process.standardInput = stdinPipe
+        let stdoutPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+
+        self.process = process
+        self.stdinHandle = stdinPipe.fileHandleForWriting
+        self.stdoutPipe = stdoutPipe
+        self.stderrPipe = stderrPipe
+        self.udid = udid
+        stdoutBuffer = Data()
+        shadowAdviceReported = false
+        stderrLineBuffer = Data()
+        stderrLines = []
+
+        stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            guard let self else {
+                handle.readabilityHandler = nil
+                return
+            }
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            self.consumeStderr(data)
+        }
+        stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            guard let self else {
+                handle.readabilityHandler = nil
+                return
+            }
+            let data = handle.availableData
+            if data.isEmpty {
+                handle.readabilityHandler = nil
+                return
+            }
+            self.consumeAckData(data)
+        }
+        process.terminationHandler = { [weak self] endedProcess in
+            DispatchQueue.main.async {
+                guard let self, self.process === endedProcess else { return }
+                self.handleProcessEnd(endedProcess)
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            self.process = nil
+            self.stdinHandle = nil
+            self.stdoutPipe = nil
+            self.stderrPipe = nil
+            self.udid = nil
+            DispatchQueue.main.async { self.onEnded?(error.localizedDescription) }
+        }
+    }
+
+    /// 写入一条手势（JSON 行）。主线程调用；会话未运行时丢弃——
+    /// 会话的生死与重启由 AppModel 按预览目标流转管理，这里不重复上报。
+    public func send(_ gesture: IOSGesture) throws {
+        guard let stdinHandle, process?.isRunning == true else { return }
+        let data = try JSONEncoder().encode(gesture)
+        stdinHandle.write(data)
+        stdinHandle.write(Data([UInt8(ascii: "\n")]))
+    }
+
+    /// 关闭 stdin 让 baguette 干净退出（"stdin closed, input session ending"），
+    /// 2 秒后仍在则 SIGINT 兜底。
+    public func stop() {
+        guard let process else { return }
+        stdoutPipe?.fileHandleForReading.readabilityHandler = nil
+        stderrPipe?.fileHandleForReading.readabilityHandler = nil
+        try? stdinHandle?.close()
+        self.stdinHandle = nil
+        self.stdoutPipe = nil
+        self.stderrPipe = nil
+        self.process = nil
+        self.udid = nil
+        if process.isRunning {
+            process.interrupt()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                if process.isRunning {
+                    kill(process.processIdentifier, SIGKILL)
+                }
+            }
+        }
+    }
+
+    // MARK: - 解析辅助
+
+    /// ack 行 → Ack；非 JSON 或缺 `ok` 字段返回 nil。
+    static func parseAck(_ line: String) -> Ack? {
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ok = object["ok"] as? Bool else { return nil }
+        return Ack(ok: ok, error: object["error"] as? String)
+    }
+
+    /// Device Hub 影子警告判定。baguette v0.2.13 的 advisory 一行内同时出现接管描述
+    /// （"Device Hub has attached…"）与修复命令（`baguette heal …`），锚定这两条特征短语
+    /// 并忽略大小写，避免把普通日志行误报成影子。
+    static func isShadowAdviceLine(_ line: String) -> Bool {
+        let lowered = line.lowercased()
+        return lowered.contains("device hub has attached") || lowered.contains("baguette heal")
+    }
+
+    // MARK: - 内部
+
+    private func consumeAckData(_ data: Data) {
+        stdoutBuffer.append(data)
+        while let newline = stdoutBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+            let line = Data(stdoutBuffer[stdoutBuffer.startIndex..<newline])
+            stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...newline)
+            guard !line.isEmpty,
+                  let ack = Self.parseAck(String(decoding: line, as: UTF8.self)) else { continue }
+            DispatchQueue.main.async { [weak self] in
+                self?.onAck?(ack)
+            }
+        }
+    }
+
+    private func consumeStderr(_ data: Data) {
+        stderrLineBuffer.append(data)
+        while let newline = stderrLineBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+            let line = Data(stderrLineBuffer[stderrLineBuffer.startIndex..<newline])
+            stderrLineBuffer.removeSubrange(stderrLineBuffer.startIndex...newline)
+            guard !line.isEmpty else { continue }
+            let text = String(decoding: line, as: UTF8.self)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.stderrLines.append(text)
+                if self.stderrLines.count > 50 {
+                    self.stderrLines.removeFirst(self.stderrLines.count - 50)
+                }
+                if !self.shadowAdviceReported, Self.isShadowAdviceLine(text) {
+                    self.shadowAdviceReported = true
+                    self.onShadowAdvice?()
+                }
+            }
+        }
+    }
+
+    private func handleProcessEnd(_ process: Process) {
+        self.process = nil
+        self.stdinHandle = nil
+        self.stdoutPipe = nil
+        self.stderrPipe = nil
+        let reason: String? = process.terminationStatus == 0
+            ? nil
+            : (stderrLines.last ?? AppLanguage.text("command.exitCode", String(process.terminationStatus)))
+        onEnded?(reason)
+    }
+}

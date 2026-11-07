@@ -272,3 +272,17 @@
 "ios.delete.confirmTitle" = "Delete “%@”?";
 "ios.delete.confirmMessage" = "The simulator will be deleted. This action cannot be undone.\n\nName: %@\nUDID: %@";
 "ios.delete.dataPath" = "Data folder: %@";
+"ios.key.home" = "Home";
+"ios.key.lock" = "Lock";
+"ios.key.volumeUp" = "Volume Up";
+"ios.key.volumeDown" = "Volume Down";
+"ios.input.basicTierNotice" = "Touch input and hardware keys need the enhanced tier (bundled baguette, macOS 15+ on Apple Silicon).";
+"ios.input.gestureFailed" = "Could Not Send Touch Input";
+"ios.input.rejected" = "The simulator rejected the input: %@";
+"ios.shadow.banner" = "Device Hub took over this simulator's input — touches and keys may be dropped.";
+"ios.shadow.action" = "Repair Input…";
+"ios.heal.action" = "Repair";
+"ios.heal.confirmTitle" = "Repair input on “%@”?";
+"ios.heal.confirmMessage" = "Repairing restarts SpringBoard, which kills the apps currently running on the simulator. Touch input should work again afterwards.";
+"ios.heal.failed" = "Could not repair input on %@";
+"ios.baguette.screenMissing" = "Could not read the simulator screen size from baguette describe-ui output";

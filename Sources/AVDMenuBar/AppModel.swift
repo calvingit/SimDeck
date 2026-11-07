@@ -68,7 +68,10 @@ final class AppModel: ObservableObject {
     private var simulatorMonitor: SimulatorMonitor?
     let adbStreamer = ADBH264Streamer()
     let baguetteStreamer = BaguetteController()
+    let baguetteInput = BaguetteInputSession()
     private var baguetteURL: URL?
+    /// 增强档可用性（baguette 已找到且 macOS 15+/arm64），installSimctlTools 时确定。
+    private(set) var isEnhancedTierAvailable = false
 
     @Published private(set) var avds: [AVD] = []
     @Published private(set) var running: [RunningEmulator] = []
@@ -79,6 +82,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var simulators: [SimulatorDevice] = []
     @Published private(set) var busySimulators: Set<String> = []
     @Published private(set) var iosError: String?
+    /// iOS 模拟器屏幕尺寸（device points，来自 baguette describe-ui 的 `screen` 字段），触摸映射用。
+    @Published private(set) var iosScreenPoints: [String: CGSize] = [:]
+    /// 被 Device Hub 影子接管的设备：baguette input stderr 警告触发，notifyutil 二次确认后入库。
+    @Published private(set) var shadowedUDIDs: Set<String> = []
 
     @Published var selectedDeviceID: DeviceEntry.ID?
     @Published private(set) var isRefreshing = false
@@ -114,6 +121,9 @@ final class AppModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] state in self?.handleBaguetteStreamState(state) }
             .store(in: &cancellables)
+        baguetteInput.onShadowAdvice = { [weak self] in self?.confirmInputShadow() }
+        baguetteInput.onAck = { [weak self] ack in self?.handleInputAck(ack) }
+        baguetteInput.onEnded = { [weak self] reason in self?.handleInputSessionEnded(reason: reason) }
     }
 
     /// 置顶的 AVD（持久化到 UserDefaults）。
@@ -195,6 +205,7 @@ final class AppModel: ObservableObject {
         simctl = service
         simulatorMonitor = SimulatorMonitor(simctl: service)
         baguetteURL = BaguetteController.locateBinary()
+        isEnhancedTierAvailable = baguetteURL != nil && BaguetteController.isEnhancedTierSupported()
     }
 
     private func installTools(_ resolved: ToolPaths) {
@@ -560,6 +571,12 @@ final class AppModel: ObservableObject {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
                     self.busySimulators.remove(device.udid)
+                    // 本 app 启动的设备自动 heal（设计 §4）：刚开机时没有运行中的 App，
+                    // heal 的 SpringBoard 重启零代价；若 Device Hub 恰好开着，其 dtuhidd
+                    // 会在开机后数秒内挂到设备上，延迟执行让影子先出现再收回。
+                    if self.isEnhancedTierAvailable, let baguette = self.baguetteURL {
+                        self.scheduleAutoHeal(udid: device.udid, baguette: baguette)
+                    }
                     self.refreshSimulators()
                 }
             } catch {
@@ -723,6 +740,138 @@ final class AppModel: ObservableObject {
                 }
             } catch {
                 DispatchQueue.main.async { completion(.failure(error)) }
+            }
+        }
+    }
+
+    // MARK: - iOS 触摸输入与 heal（增强档）
+
+    /// input 会话的启动时刻；结束/停止时清空。运行 ≥5s 后才意外退出才允许重启，
+    /// 避免坏二进制导致的快速死亡被反复拉起（与 ADB 流的失败计数同一思路）。
+    private var inputStartedAt: Date?
+    private var inputRestartWorkItem: DispatchWorkItem?
+
+    /// input 常驻会话与预览管线无关：目标是已启动的 iOS 模拟器且增强档可用时保持运行，
+    /// stream 降级到截图轮询后触摸与按键仍然可用。
+    private func updateInputSession(udid: String?, booted: Bool, isSimulator: Bool) {
+        if isSimulator, booted, isEnhancedTierAvailable, let udid, let baguette = baguetteURL {
+            if baguetteInput.udid != udid {
+                baguetteInput.stop()
+                startBaguetteInput(udid: udid, baguette: baguette)
+            } else if !baguetteInput.isRunning {
+                startBaguetteInput(udid: udid, baguette: baguette)
+            }
+        } else if baguetteInput.udid != nil {
+            baguetteInput.stop()
+        }
+    }
+
+    private func startBaguetteInput(udid: String, baguette: URL) {
+        inputRestartWorkItem?.cancel()
+        inputStartedAt = Date()
+        baguetteInput.start(udid: udid, baguette: baguette)
+        refreshIOSScreenPoints(udid: udid)
+    }
+
+    /// describe-ui 拿屏幕 points 尺寸（触摸映射的必备条件）；失败时保持 nil，触摸映射自然禁用。
+    private func refreshIOSScreenPoints(udid: String) {
+        guard let baguette = baguetteURL else { return }
+        queue.async { [weak self] in
+            let size = try? BaguetteController.describeScreen(udid: udid, baguette: baguette)
+            DispatchQueue.main.async {
+                guard let self, self.previewUDID == udid else { return }
+                if let size {
+                    self.iosScreenPoints[udid] = size
+                } else {
+                    self.iosScreenPoints.removeValue(forKey: udid)
+                }
+            }
+        }
+    }
+
+    func sendIOSGesture(udid: String, _ gesture: IOSGesture) {
+        guard baguetteInput.udid == udid, baguetteInput.isRunning else { return }
+        do {
+            try baguetteInput.send(gesture)
+        } catch {
+            reportOperationError(AppLanguage.text("ios.input.gestureFailed"), error)
+        }
+    }
+
+    /// 手动 heal：入口在 AppCoordinator 的确认弹窗之后（heal 会杀运行中的 App）。
+    func healSimulator(_ device: SimulatorDevice) {
+        guard let baguette = baguetteURL, !busySimulators.contains(device.udid) else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                let outcome = try BaguetteController.heal(udid: device.udid, baguette: baguette)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    guard outcome == .reclaimed else { return }
+                    self.shadowedUDIDs.remove(device.udid)
+                    // heal 重启了 backboardd/SpringBoard：重建输入会话重新绑定 HID 面。
+                    if self.baguetteInput.udid == device.udid, let url = self.baguetteURL {
+                        self.startBaguetteInput(udid: device.udid, baguette: url)
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.heal.failed", device.name), error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    /// baguette input 启动时报告影子警告 → notifyutil 二次确认后入库，UI 据此提示修复。
+    private func confirmInputShadow() {
+        guard let udid = baguetteInput.udid, let simctl else { return }
+        queue.async { [weak self] in
+            let shadowed = simctl.isInputShadowed(udid: udid)
+            DispatchQueue.main.async {
+                guard let self, self.baguetteInput.udid == udid, shadowed else { return }
+                self.shadowedUDIDs.insert(udid)
+            }
+        }
+    }
+
+    private func handleInputAck(_ ack: BaguetteInputSession.Ack) {
+        guard !ack.ok else { return }
+        onError?(
+            AppLanguage.text("ios.input.gestureFailed"),
+            AppLanguage.text("ios.input.rejected", ack.error ?? "unknown error")
+        )
+    }
+
+    private func handleInputSessionEnded(reason: String?) {
+        guard let udid = baguetteInput.udid else { return } // 主动 stop 已清空 udid
+        shadowedUDIDs.remove(udid)
+        let ran = inputStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+        inputStartedAt = nil
+        guard reason != nil, ran >= 5,
+              previewUDID == udid, previewBooted, isEnhancedTierAvailable,
+              let baguette = baguetteURL else { return }
+        inputRestartWorkItem?.cancel()
+        let restart = DispatchWorkItem { [weak self] in
+            guard let self, self.previewUDID == udid, self.baguetteInput.udid == nil else { return }
+            self.startBaguetteInput(udid: udid, baguette: baguette)
+        }
+        inputRestartWorkItem = restart
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: restart)
+    }
+
+    /// 设备由本 app boot 后延迟执行 heal；对没有影子的设备只是 no-op
+    /// （baguette 自身会输出 "nothing to heal"），对已关闭/启动中的设备同样无害。
+    private func scheduleAutoHeal(udid: String, baguette: URL) {
+        queue.asyncAfter(deadline: .now() + 5) { [weak self] in
+            guard let self, self.isEnhancedTierAvailable else { return }
+            let outcome = try? BaguetteController.heal(udid: udid, baguette: baguette)
+            DispatchQueue.main.async {
+                if outcome == .reclaimed {
+                    self.shadowedUDIDs.remove(udid)
+                }
             }
         }
     }
@@ -1088,7 +1237,7 @@ final class AppModel: ObservableObject {
             adbFailureCount = 0
             iosFailureCount = 0
             if simulator != nil {
-                setPreviewPipeline(enhancedTierIsAvailable ? .iosStream : .iosPolling)
+                setPreviewPipeline(isEnhancedTierAvailable ? .iosStream : .iosPolling)
             } else {
                 // 真机无 SCK 窗口捕获；模拟器未开机时 ADB 流也不可用，
                 // 两者失败后统一降级为截屏轮播，因此初始管线一律走 ADB 流。
@@ -1097,13 +1246,9 @@ final class AppModel: ObservableObject {
             if let serial {
                 refreshDeviceResolution(serial: serial)
             }
+            updateInputSession(udid: udid, booted: booted, isSimulator: simulator != nil)
         }
         applyPreviewPipeline()
-    }
-
-    /// 增强档可用性：baguette 二进制已找到且满足 macOS 15+/arm64 门槛（设计决策 2）。
-    private var enhancedTierIsAvailable: Bool {
-        baguetteURL != nil && BaguetteController.isEnhancedTierSupported()
     }
 
     /// 主界面打开/关闭时控制预览开关。
@@ -1117,6 +1262,7 @@ final class AppModel: ObservableObject {
             iosRestartWorkItem?.cancel()
             adbStreamer.stop()
             baguetteStreamer.stop()
+            baguetteInput.stop()
             previewFrame = nil
             previewImage = nil
             previewTimer?.invalidate()
@@ -1148,7 +1294,7 @@ final class AppModel: ObservableObject {
             startADBStream(serial: serial, adb: adb)
         case .iosStream:
             guard previewVisible, previewBooted, let udid = previewUDID, let baguette = baguetteURL,
-                  BaguetteController.isEnhancedTierSupported() else {
+                  isEnhancedTierAvailable else {
                 baguetteStreamer.stop()
                 schedulePreview()
                 return

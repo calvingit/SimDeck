@@ -56,6 +56,73 @@ public struct SimulatorRuntime: Identifiable, Equatable, Sendable {
     }
 }
 
+/// baguette `button` press 的目标键；rawValue 即 wire 协议的 `button` 字段值（baguette v0.2.13）。
+public enum IOSKey: String, Encodable, Sendable {
+    case home
+    case lock
+    case volumeUp = "volume-up"
+    case volumeDown = "volume-down"
+}
+
+/// baguette input JSON-lines 协议的手势（`baguette input --udid <udid>`，逐行 JSON、逐行 ack）。
+/// 坐标一律 device points（来自 describe-ui 的 `screen` 字段，不是像素）；位置类手势必带
+/// width/height；duration 单位为秒。`key` 映射为 baguette 的 `button` press。
+public enum IOSGesture: Encodable, Sendable {
+    case tap(x: Int, y: Int, width: Int, height: Int, duration: Double)
+    case swipe(startX: Int, startY: Int, endX: Int, endY: Int,
+               width: Int, height: Int, duration: Double)
+    /// startSpread/endSpread 为双指间距（points）；不编码 duration，服务端按默认值插值。
+    case pinch(cx: Int, cy: Int, startSpread: Int, endSpread: Int,
+               width: Int, height: Int)
+    case key(IOSKey)
+    case text(String)
+
+    private enum GestureCodingKeys: String, CodingKey {
+        case type, x, y, startX, startY, endX, endY
+        case cx, cy, startSpread, endSpread
+        case width, height, duration, button, text
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: GestureCodingKeys.self)
+        switch self {
+        case .tap(let x, let y, let width, let height, let duration):
+            try container.encode("tap", forKey: .type)
+            try container.encode(x, forKey: .x)
+            try container.encode(y, forKey: .y)
+            try container.encode(width, forKey: .width)
+            try container.encode(height, forKey: .height)
+            try container.encode(duration, forKey: .duration)
+        case .swipe(let startX, let startY, let endX, let endY,
+                    let width, let height, let duration):
+            try container.encode("swipe", forKey: .type)
+            try container.encode(startX, forKey: .startX)
+            try container.encode(startY, forKey: .startY)
+            try container.encode(endX, forKey: .endX)
+            try container.encode(endY, forKey: .endY)
+            try container.encode(width, forKey: .width)
+            try container.encode(height, forKey: .height)
+            try container.encode(duration, forKey: .duration)
+        case .pinch(let cx, let cy, let startSpread, let endSpread,
+                    let width, let height):
+            try container.encode("pinch", forKey: .type)
+            try container.encode(cx, forKey: .cx)
+            try container.encode(cy, forKey: .cy)
+            try container.encode(startSpread, forKey: .startSpread)
+            try container.encode(endSpread, forKey: .endSpread)
+            try container.encode(width, forKey: .width)
+            try container.encode(height, forKey: .height)
+        case .key(let key):
+            try container.encode("button", forKey: .type)
+            try container.encode(key, forKey: .button)
+            try container.encode(0.0, forKey: .duration)
+        case .text(let text):
+            try container.encode("type", forKey: .type)
+            try container.encode(text, forKey: .text)
+        }
+    }
+}
+
 /// `simctl list -j devicetypes` 中的一条机型定义。
 public struct SimulatorDeviceType: Identifiable, Equatable, Sendable {
     public let identifier: String

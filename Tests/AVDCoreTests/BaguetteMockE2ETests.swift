@@ -1,8 +1,10 @@
 import XCTest
 @testable import AVDCore
 
-/// 按设计文档 §5.2 的"假可执行 + 参数记录"模式验证 baguette stream 子进程管理：
-/// 默认参数、AVCC 回放解码、SIGINT 干净退出、异常退出回调与二进制定位。
+/// 按设计文档 §5.2 的"假可执行 + 参数记录"模式验证 baguette 子进程管理：
+/// stream 默认参数、AVCC 回放解码、SIGINT 干净退出、异常退出回调与二进制定位；
+/// input 会话的手势 JSON 写入与 ack 回读、失败 ack、影子警告；
+/// describe-ui 的 screen 解析与 heal 的 outcome 解析。
 /// 默认跳过；运行：AVD_MOCK_E2E=1 swift test --filter BaguetteMockE2ETests
 final class BaguetteMockE2ETests: XCTestCase {
     private var root: URL!
@@ -153,6 +155,140 @@ final class BaguetteMockE2ETests: XCTestCase {
             ),
             "macOS 15 以下不具备增强档门槛"
         )
+    }
+
+    // MARK: - input 会话
+
+    func testInputSessionSendsGestureJSONAndReadsAck() throws {
+        let inputRecord = root.appendingPathComponent("input-record.txt")
+        let script = root.appendingPathComponent("baguette-input")
+        try writeScript(at: script, contents: """
+        #!/bin/sh
+        printf '%s\\n' "$*" >> "\(recordFile.path)"
+        while IFS= read -r line; do
+          printf '%s\\n' "$line" >> "\(inputRecord.path)"
+          printf '%s\\n' '{"ok":true}'
+        done
+        """)
+
+        let session = BaguetteInputSession()
+        defer { session.stop() }
+        let acked = expectation(description: "ack 回读")
+        var ack: BaguetteInputSession.Ack?
+        session.onAck = {
+            ack = $0
+            acked.fulfill()
+        }
+
+        session.start(udid: Self.udid, baguette: script)
+        XCTAssertEqual(session.udid, Self.udid)
+        try session.send(.tap(x: 219, y: 478, width: 402, height: 874, duration: 0.05))
+        wait(for: [acked], timeout: 5)
+        XCTAssertEqual(ack?.ok, true)
+        XCTAssertNil(ack?.error)
+        XCTAssertTrue(waitForRecord(containing: "input --udid \(Self.udid)"), "input 子进程默认参数为 input --udid <udid>")
+
+        // 逐字段核对写入 stdin 的手势 JSON（不依赖键序）
+        let sent = try String(contentsOf: inputRecord, encoding: .utf8)
+        let line = try XCTUnwrap(sent.split(separator: "\n").first)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+        XCTAssertEqual(object["type"] as? String, "tap")
+        XCTAssertEqual(object["x"] as? Int, 219)
+        XCTAssertEqual(object["y"] as? Int, 478)
+        XCTAssertEqual(object["width"] as? Int, 402)
+        XCTAssertEqual(object["height"] as? Int, 874)
+        XCTAssertEqual(object["duration"] as? Double, 0.05)
+    }
+
+    func testInputSessionSurfacesRejectedAck() throws {
+        let script = root.appendingPathComponent("baguette-reject")
+        try writeScript(at: script, contents: """
+        #!/bin/sh
+        while IFS= read -r line; do
+          printf '%s\\n' '{"ok":false,"error":"missing field: width"}'
+        done
+        """)
+
+        let session = BaguetteInputSession()
+        defer { session.stop() }
+        let acked = expectation(description: "失败 ack")
+        var ack: BaguetteInputSession.Ack?
+        session.onAck = {
+            ack = $0
+            acked.fulfill()
+        }
+
+        session.start(udid: Self.udid, baguette: script)
+        try session.send(.swipe(startX: 0, startY: 0, endX: 10, endY: 10, width: 402, height: 874, duration: 0.3))
+        wait(for: [acked], timeout: 5)
+        XCTAssertEqual(ack?.ok, false)
+        XCTAssertEqual(ack?.error, "missing field: width")
+    }
+
+    func testInputSessionDetectsShadowAdviceOnce() throws {
+        let script = root.appendingPathComponent("baguette-shadow")
+        try writeScript(at: script, contents: """
+        #!/bin/sh
+        printf '%s\\n' "Device Hub has attached to this simulator, which shadows the input surface baguette drives — touches and buttons may be dropped while reporting ok. Run baguette heal --udid \(Self.udid) to reclaim it (this restarts SpringBoard)." >&2
+        while IFS= read -r line; do
+          printf '%s\\n' '{"ok":true}'
+        done
+        """)
+
+        let session = BaguetteInputSession()
+        defer { session.stop() }
+        let advised = expectation(description: "影子警告上报")
+        var adviceCount = 0
+        session.onShadowAdvice = {
+            adviceCount += 1
+            advised.fulfill()
+        }
+
+        session.start(udid: Self.udid, baguette: script)
+        try session.send(.key(.home)) // 产生一次 ack，确认会话存活
+        wait(for: [advised], timeout: 5)
+        XCTAssertEqual(adviceCount, 1, "影子警告每次会话至多上报一次")
+    }
+
+    // MARK: - describe-ui 与 heal
+
+    func testDescribeScreenReadsCannedScreenField() throws {
+        let canned = root.appendingPathComponent("describe.json")
+        try """
+        {"children":[],"frame":{"height":874,"width":402,"x":0,"y":0},"role":"AXApplication",
+         "screen":{"height":874,"orientation":"portrait","target":{"litPanel":"primary","pixelSize":{"height":2622,"width":1206},"screenId":1},"width":402}}
+        """.write(to: canned, atomically: true, encoding: .utf8)
+        let script = root.appendingPathComponent("baguette-describe")
+        try writeScript(at: script, contents: """
+        #!/bin/sh
+        printf '%s\\n' "$*" >> "\(recordFile.path)"
+        if [ "$1" = "describe-ui" ]; then
+          cat "\(canned.path)"
+        fi
+        """)
+
+        let size = try BaguetteController.describeScreen(udid: Self.udid, baguette: script)
+        XCTAssertEqual(size.width, 402, "screen 字段是 device points，不是像素")
+        XCTAssertEqual(size.height, 874)
+        XCTAssertTrue(recordedCommands().contains("describe-ui --udid \(Self.udid)"))
+    }
+
+    func testHealParsesReclaimedAndUnshadowedOutcomes() throws {
+        let reclaimedScript = root.appendingPathComponent("baguette-heal-reclaimed")
+        try writeScript(at: reclaimedScript, contents: """
+        #!/bin/sh
+        printf '%s\\n' "$*" >> "\(recordFile.path)"
+        printf '[baguette] Input surface reclaimed from Device Hub (SpringBoard restarted)\\n' >&2
+        """)
+        XCTAssertEqual(try BaguetteController.heal(udid: Self.udid, baguette: reclaimedScript), .reclaimed)
+        XCTAssertTrue(recordedCommands().contains("heal --udid \(Self.udid)"))
+
+        let unshadowedScript = root.appendingPathComponent("baguette-heal-unshadowed")
+        try writeScript(at: unshadowedScript, contents: """
+        #!/bin/sh
+        printf '[baguette] Input surface is not shadowed by Device Hub — nothing to heal\\n' >&2
+        """)
+        XCTAssertEqual(try BaguetteController.heal(udid: Self.udid, baguette: unshadowedScript), .unshadowed)
     }
 
     // MARK: - 辅助

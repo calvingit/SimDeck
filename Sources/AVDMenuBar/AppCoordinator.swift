@@ -93,7 +93,11 @@ final class AppCoordinator {
             deleteSimulator: { [weak self] device in self?.confirmDeleteSimulator(device) },
             renameSimulator: { [weak self] device in self?.promptRenameSimulator(device) },
             createSimulator: { [weak self] in self?.promptCreateSimulator() },
-            screenshotSimulator: { [weak self] device in self?.takeSimulatorScreenshot(device) }
+            screenshotSimulator: { [weak self] device in self?.takeSimulatorScreenshot(device) },
+            sendIOSGesture: { [weak self] device, gesture in
+                self?.model.sendIOSGesture(udid: device.udid, gesture)
+            },
+            healSimulator: { [weak self] device in self?.confirmHealSimulator(device) }
         )
     }
 
@@ -198,6 +202,16 @@ final class AppCoordinator {
             actionTitle: AppLanguage.text("action.delete")
         ) else { return }
         model.deleteSimulator(device)
+    }
+
+    /// heal 会重启 backboardd/SpringBoard，杀掉运行中的 App——必须经确认弹窗执行。
+    private func confirmHealSimulator(_ device: SimulatorDevice) {
+        guard Alerts.confirmDestructive(
+            title: AppLanguage.text("ios.heal.confirmTitle", device.name),
+            message: AppLanguage.text("ios.heal.confirmMessage"),
+            actionTitle: AppLanguage.text("ios.heal.action")
+        ) else { return }
+        model.healSimulator(device)
     }
 
     private func promptRenameSimulator(_ device: SimulatorDevice) {
