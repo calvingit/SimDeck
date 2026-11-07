@@ -8,6 +8,24 @@ enum PreviewPipeline: Equatable {
     case polling
 }
 
+/// 创建 iOS 模拟器所需的候选缺失时抛出。
+enum SimulatorOptionError: LocalizedError {
+    case unavailable
+    case noRuntimes
+    case noDeviceTypes
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return AppLanguage.text("ios.create.unavailable")
+        case .noRuntimes:
+            return AppLanguage.text("ios.create.noRuntimes")
+        case .noDeviceTypes:
+            return AppLanguage.text("ios.create.noDeviceTypes")
+        }
+    }
+}
+
 struct SettingsDraft: Equatable {
     var avdmanagerPath: String
     var emulatorPath: String
@@ -44,6 +62,8 @@ final class AppModel: ObservableObject {
     private var monitor: DeviceMonitor?
     private var snapshots: SnapshotService?
     private var provisioning: AVDProvisioningService?
+    private var simctl: SimctlService?
+    private var simulatorMonitor: SimulatorMonitor?
     let adbStreamer = ADBH264Streamer()
 
     @Published private(set) var avds: [AVD] = []
@@ -52,6 +72,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var runtimeError: String?
     @Published private(set) var busyAVDs: Set<String> = []
     @Published private(set) var pinnedAVDs: Set<String> = []
+    @Published private(set) var simulators: [SimulatorDevice] = []
+    @Published private(set) var busySimulators: Set<String> = []
+    @Published private(set) var iosError: String?
 
     @Published var selectedDeviceID: DeviceEntry.ID?
     @Published private(set) var isRefreshing = false
@@ -65,6 +88,7 @@ final class AppModel: ObservableObject {
     var onError: ((String, String) -> Void)?
 
     private var refreshTimer: Timer?
+    private var simulatorRefreshTimer: Timer?
     var cancellables = Set<AnyCancellable>()
 
     init() {
@@ -114,7 +138,9 @@ final class AppModel: ObservableObject {
     }
 
     /// 加载 UserDefaults 中的路径配置；失败时保留错误，供面板显示。
+    /// iOS 模拟器工具不依赖 Android SDK，无论 Android 路径是否可用都安装。
     func loadConfiguration() {
+        installSimctlTools()
         let draft = currentDraft()
         do {
             let resolved = try ToolLocator.resolve(
@@ -146,6 +172,16 @@ final class AppModel: ObservableObject {
         } catch {
             return error.localizedDescription
         }
+    }
+
+    /// iOS 模拟器服务与 Android SDK 无关，装一次即可；重复调用保持原实例。
+    /// 未安装 Xcode/CLT（定位不到 simctl）时 iOS 功能整体缺席：不轮询、不报错、不显示 iOS 行。
+    private func installSimctlTools() {
+        guard simctl == nil else { return }
+        guard let simctlURL = SimctlService.locateSystemSimctl() else { return }
+        let service = SimctlService(simctl: simctlURL)
+        simctl = service
+        simulatorMonitor = SimulatorMonitor(simctl: service)
     }
 
     private func installTools(_ resolved: ToolPaths) {
@@ -238,6 +274,7 @@ final class AppModel: ObservableObject {
         refreshRunning {
             if self.refreshGeneration == generation { self.isRefreshing = false }
         }
+        refreshSimulators()
     }
 
     func refreshAVDs(completion: (() -> Void)? = nil) {
@@ -453,6 +490,226 @@ final class AppModel: ObservableObject {
                 }
             } catch {
                 self?.reportOperationError(AppLanguage.text("operation.deleteFailed", avd.name), error)
+            }
+        }
+    }
+
+    // MARK: - iOS 模拟器
+
+    func refreshSimulators(completion: (() -> Void)? = nil) {
+        guard let simulatorMonitor else {
+            completion?()
+            return
+        }
+        queue.async { [weak self] in
+            let result = Result { try simulatorMonitor.devices() }
+            DispatchQueue.main.async {
+                guard let self else {
+                    completion?()
+                    return
+                }
+                switch result {
+                case .success(let devices):
+                    if self.simulators != devices {
+                        self.simulators = devices
+                    }
+                    if self.iosError != nil {
+                        self.iosError = nil
+                    }
+                case .failure(let error):
+                    // 保留上一次已知的设备列表，避免探测失败时清空面板。
+                    self.iosError = error.localizedDescription
+                }
+                self.scheduleNextSimulatorRefresh()
+                completion?()
+            }
+        }
+    }
+
+    private func scheduleNextSimulatorRefresh() {
+        simulatorRefreshTimer?.invalidate()
+        let needsFastPolling = !busySimulators.isEmpty
+            || simulators.contains { !$0.isBooted && $0.state != "Shutdown" }
+        let interval: TimeInterval = needsFastPolling ? 1.0 : 3.0
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+            self?.refreshSimulators()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        simulatorRefreshTimer = timer
+    }
+
+    func bootSimulator(_ device: SimulatorDevice) {
+        guard let simctl, !busySimulators.contains(device.udid), !device.isBooted else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                try simctl.boot(udid: device.udid)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.refreshSimulators()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.startFailed", device.name), error.localizedDescription)
+                    self.refreshSimulators()
+                }
+            }
+        }
+    }
+
+    func shutdownSimulator(_ device: SimulatorDevice) {
+        guard let simctl, !busySimulators.contains(device.udid), device.isBooted else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                try simctl.shutdown(udid: device.udid)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.refreshSimulators()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.shutdownFailed", device.name), error.localizedDescription)
+                    self.refreshSimulators()
+                }
+            }
+        }
+    }
+
+    func rebootSimulator(_ device: SimulatorDevice) {
+        guard let simctl, !busySimulators.contains(device.udid), device.isBooted else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                try simctl.reboot(udid: device.udid)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.refreshSimulators()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.restartFailed", device.name), error.localizedDescription)
+                    self.refreshSimulators()
+                }
+            }
+        }
+    }
+
+    func eraseSimulator(_ device: SimulatorDevice) {
+        guard let simctl, !busySimulators.contains(device.udid) else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                // 以最新列表核对开关机状态，避免 UI 状态过期导致 erase 前置 shutdown 报错。
+                let booted = (try? simctl.listDevices()
+                    .first { $0.udid == device.udid }?.isBooted) ?? device.isBooted
+                try simctl.erase(udid: device.udid, isBooted: booted)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.refreshSimulators()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.eraseFailed", device.name), error.localizedDescription)
+                    self.refreshSimulators()
+                }
+            }
+        }
+    }
+
+    func deleteSimulator(_ device: SimulatorDevice) {
+        guard let simctl, !busySimulators.contains(device.udid) else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                try simctl.delete(udid: device.udid)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.refreshSimulators()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.deleteFailed", device.name), error.localizedDescription)
+                    self.refreshSimulators()
+                }
+            }
+        }
+    }
+
+    func renameSimulator(_ device: SimulatorDevice, newName: String) {
+        guard let simctl, !busySimulators.contains(device.udid), newName != device.name else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                try simctl.rename(udid: device.udid, to: newName)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.refreshSimulators()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.renameFailed", device.name), error.localizedDescription)
+                    self.refreshSimulators()
+                }
+            }
+        }
+    }
+
+    func createSimulator(name: String, deviceType: String, runtime: String) {
+        guard let simctl else { return }
+        queue.async { [weak self] in
+            do {
+                try simctl.create(name: name, deviceType: deviceType, runtime: runtime)
+                DispatchQueue.main.async { [weak self] in
+                    self?.refreshSimulators()
+                }
+            } catch {
+                self?.reportOperationError(AppLanguage.text("ios.createFailed"), error)
+            }
+        }
+    }
+
+    /// 创建对话框的候选：iOS runtime 与机型定义。
+    func simulatorProvisioningOptions(
+        completion: @escaping (Result<(deviceTypes: [SimulatorDeviceType], runtimes: [SimulatorRuntime]), Error>) -> Void
+    ) {
+        guard let simulatorMonitor else {
+            completion(.failure(SimulatorOptionError.unavailable))
+            return
+        }
+        queue.async {
+            do {
+                let runtimes = try simulatorMonitor.iosRuntimes()
+                let deviceTypes = try simulatorMonitor.deviceTypes()
+                DispatchQueue.main.async {
+                    if runtimes.isEmpty {
+                        completion(.failure(SimulatorOptionError.noRuntimes))
+                    } else if deviceTypes.isEmpty {
+                        completion(.failure(SimulatorOptionError.noDeviceTypes))
+                    } else {
+                        completion(.success((deviceTypes, runtimes)))
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(error)) }
             }
         }
     }

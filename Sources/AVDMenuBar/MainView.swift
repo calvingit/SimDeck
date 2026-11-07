@@ -264,19 +264,23 @@ struct MainView: View {
         }
     }
 
+    @ViewBuilder
     private var bottomBar: some View {
-        HStack(spacing: 14) {
-            keyButton(AppLanguage.text("key.back"), icon: "arrow.uturn.backward", code: 4)
-            keyButton(AppLanguage.text("key.home"), icon: "house", code: 3)
-            keyButton(AppLanguage.text("key.recents"), icon: "square.stack.3d.up", code: 187)
-            Divider()
-                .frame(height: 26)
-            keyButton(AppLanguage.text("key.power"), icon: "power", code: 26)
-            keyButton(AppLanguage.text("key.volumeUp"), icon: "speaker.wave.2", code: 24)
-            keyButton(AppLanguage.text("key.volumeDown"), icon: "speaker.wave.1", code: 25)
+        // iOS 行不显示 Android keycode 按键条（基础档隐藏，增强档在后续阶段接入）。
+        if selected?.platform != .iosSimulator {
+            HStack(spacing: 14) {
+                keyButton(AppLanguage.text("key.back"), icon: "arrow.uturn.backward", code: 4)
+                keyButton(AppLanguage.text("key.home"), icon: "house", code: 3)
+                keyButton(AppLanguage.text("key.recents"), icon: "square.stack.3d.up", code: 187)
+                Divider()
+                    .frame(height: 26)
+                keyButton(AppLanguage.text("key.power"), icon: "power", code: 26)
+                keyButton(AppLanguage.text("key.volumeUp"), icon: "speaker.wave.2", code: 24)
+                keyButton(AppLanguage.text("key.volumeDown"), icon: "speaker.wave.1", code: 25)
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
     }
 
     private func keyButton(_ title: String, icon: String, code: Int) -> some View {
@@ -300,6 +304,7 @@ struct MainView: View {
 
     private var previewMessage: String {
         guard let selected else { return AppLanguage.text("preview.selectDevice") }
+        if selected.platform == .iosSimulator { return AppLanguage.text("ios.previewUnavailable") }
         if selected.status == .starting { return AppLanguage.text("preview.starting") }
         if selected.status == .stopped { return AppLanguage.text("preview.startAVD") }
         if selectedRunning?.isBooted != true { return AppLanguage.text("preview.waitingForDevice") }
@@ -325,10 +330,16 @@ struct MainView: View {
                 primaryActions(entry)
             }
             HStack(spacing: 8) {
-                developerMenu(entry)
-                if let avd = entry.avd {
-                    snapshotMenu(avd, entry.device)
-                    managementMenu(avd, entry.device)
+                if entry.platform == .iosSimulator {
+                    if let simulator = entry.simulator {
+                        iosManagementMenu(simulator)
+                    }
+                } else {
+                    developerMenu(entry)
+                    if let avd = entry.avd {
+                        snapshotMenu(avd, entry.device)
+                        managementMenu(avd, entry.device)
+                    }
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -341,7 +352,24 @@ struct MainView: View {
 
     @ViewBuilder
     private func primaryActions(_ entry: DeviceEntry) -> some View {
-        if let avd = entry.avd {
+        if entry.platform == .iosSimulator, let simulator = entry.simulator {
+            if model.busySimulators.contains(simulator.udid) {
+                ProgressView().controlSize(.small)
+            } else if entry.status == .starting {
+                ProgressView().controlSize(.small).accessibilityLabel(AppLanguage.text("device.starting"))
+            } else if entry.status == .running {
+                Button(AppLanguage.text("action.restart")) { actions.rebootSimulator(simulator) }
+                Button(AppLanguage.text("action.shutdown")) { actions.shutdownSimulator(simulator) }
+            } else {
+                Button {
+                    actions.bootSimulator(simulator)
+                } label: {
+                    Label(AppLanguage.text("action.start"), systemImage: "play.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!simulator.isAvailable)
+            }
+        } else if let avd = entry.avd {
             if entry.status == .starting {
                 ProgressView().controlSize(.small).accessibilityLabel(AppLanguage.text("device.starting"))
                 Button(AppLanguage.text("action.cancelStart")) {
@@ -388,6 +416,18 @@ struct MainView: View {
             }
         } label: {
             Label(AppLanguage.text("menu.developerTools"), systemImage: "terminal")
+        }
+    }
+
+    private func iosManagementMenu(_ simulator: SimulatorDevice) -> some View {
+        Menu {
+            Button(AppLanguage.text("ios.menu.rename")) { actions.renameSimulator(simulator) }
+            Divider()
+            // erase/delete 运行中可用（erase 由服务层先关机），无需先停用。
+            Button(AppLanguage.text("ios.menu.erase"), role: .destructive) { actions.eraseSimulator(simulator) }
+            Button(AppLanguage.text("ios.menu.delete"), role: .destructive) { actions.deleteSimulator(simulator) }
+        } label: {
+            Label(AppLanguage.text("menu.manage"), systemImage: "gearshape")
         }
     }
 

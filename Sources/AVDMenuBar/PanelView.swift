@@ -82,6 +82,14 @@ struct AVDPanelView: View {
                                 action: actions.refresh
                             )
                         }
+                        if model.iosError != nil {
+                            ErrorBanner(
+                                title: AppLanguage.text("panel.iosError"),
+                                detail: model.iosError ?? "",
+                                actionTitle: AppLanguage.text("action.refresh"),
+                                action: actions.refresh
+                            )
+                        }
                     }
                     .padding(.bottom, 4)
                 }
@@ -101,7 +109,7 @@ struct AVDPanelView: View {
                     .padding(.horizontal, 4)
                 }
 
-                if entries.isEmpty && model.listError == nil && model.runtimeError == nil {
+                if entries.isEmpty && model.listError == nil && model.runtimeError == nil && model.iosError == nil {
                     if model.isRefreshing {
                         Text(AppLanguage.text("device.loading"))
                             .foregroundStyle(.secondary)
@@ -141,21 +149,45 @@ struct AVDPanelView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .fixedSize()
+        } else if entry.platform == .iosSimulator, let simulator = entry.simulator {
+            Group {
+                if model.busySimulators.contains(simulator.udid) || entry.status == .starting {
+                    ProgressView().controlSize(.small).accessibilityLabel(AppLanguage.text("device.starting"))
+                } else if entry.status == .running {
+                    Button(AppLanguage.text("action.restart")) { actions.rebootSimulator(simulator) }
+                    Button(AppLanguage.text("action.shutdown")) { actions.shutdownSimulator(simulator) }
+                } else {
+                    Button(AppLanguage.text("action.start")) { actions.bootSimulator(simulator) }
+                        .disabled(!simulator.isAvailable)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fixedSize()
         }
     }
 
     private var headerSubtitle: String {
         let entries = model.deviceEntries
-        let real = entries.filter { $0.device?.isRealDevice == true }.count
-        let avds = entries.count - real
+        let android = entries.filter { $0.platform == .android }
+        let real = android.filter { $0.device?.isRealDevice == true }.count
+        let avds = android.count - real
         let running = entries.filter { $0.status == .running }.count
-        return AppLanguage.text("panel.deviceCounts", String(running), String(avds)) + (real > 0 ? AppLanguage.text("panel.physicalCount", String(real)) : "")
+        let iosCount = entries.filter { $0.platform == .iosSimulator }.count
+        return AppLanguage.text("panel.deviceCounts", String(running), String(avds))
+            + (real > 0 ? AppLanguage.text("panel.physicalCount", String(real)) : "")
+            + (iosCount > 0 ? AppLanguage.text("panel.iosCount", String(iosCount)) : "")
     }
 
     private var footer: some View {
         HStack(spacing: 10) {
             Button(action: actions.create) {
                 Label(AppLanguage.text("avd.create.title"), systemImage: "plus")
+            }
+            .buttonStyle(.borderless)
+
+            Button(action: actions.createSimulator) {
+                Label(AppLanguage.text("ios.create.title"), systemImage: "iphone")
             }
             .buttonStyle(.borderless)
 

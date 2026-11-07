@@ -34,4 +34,11 @@ struct PanelActions {
     var sendKey: (RunningEmulator, Int) -> Void
     var sendTap: (RunningEmulator, Int, Int) -> Void
     var sendSwipe: (RunningEmulator, Int, Int, Int, Int, Int) -> Void
+    var bootSimulator: (SimulatorDevice) -> Void
+    var shutdownSimulator: (SimulatorDevice) -> Void
+    var rebootSimulator: (SimulatorDevice) -> Void
+    var eraseSimulator: (SimulatorDevice) -> Void
+    var deleteSimulator: (SimulatorDevice) -> Void
+    var renameSimulator: (SimulatorDevice) -> Void
+    var createSimulator: () -> Void
 }

@@ -85,7 +85,14 @@ final class AppCoordinator {
                     x1: x1, y1: y1, x2: x2, y2: y2,
                     durationMs: durationMs
                 )
-            }
+            },
+            bootSimulator: { [weak self] device in self?.model.bootSimulator(device) },
+            shutdownSimulator: { [weak self] device in self?.model.shutdownSimulator(device) },
+            rebootSimulator: { [weak self] device in self?.model.rebootSimulator(device) },
+            eraseSimulator: { [weak self] device in self?.confirmEraseSimulator(device) },
+            deleteSimulator: { [weak self] device in self?.confirmDeleteSimulator(device) },
+            renameSimulator: { [weak self] device in self?.promptRenameSimulator(device) },
+            createSimulator: { [weak self] in self?.promptCreateSimulator() }
         )
     }
 
@@ -166,6 +173,124 @@ final class AppCoordinator {
             actionTitle: AppLanguage.text("action.move")
         ) else { return }
         model.moveAVD(avd: avd, serial: device?.serial, newPath: target.path)
+    }
+
+    // MARK: - iOS 模拟器
+
+    private func confirmEraseSimulator(_ device: SimulatorDevice) {
+        guard Alerts.confirmDestructive(
+            title: AppLanguage.text("ios.erase.confirmTitle", device.name),
+            message: AppLanguage.text("ios.erase.confirmMessage", device.name, device.udid),
+            actionTitle: AppLanguage.text("ios.erase.action")
+        ) else { return }
+        model.eraseSimulator(device)
+    }
+
+    private func confirmDeleteSimulator(_ device: SimulatorDevice) {
+        var message = AppLanguage.text("ios.delete.confirmMessage", device.name, device.udid)
+        if let dataPath = device.dataPath, !dataPath.isEmpty {
+            message += "\n" + AppLanguage.text("ios.delete.dataPath", dataPath)
+        }
+        guard Alerts.confirmDestructive(
+            title: AppLanguage.text("ios.delete.confirmTitle", device.name),
+            message: message,
+            actionTitle: AppLanguage.text("action.delete")
+        ) else { return }
+        model.deleteSimulator(device)
+    }
+
+    private func promptRenameSimulator(_ device: SimulatorDevice) {
+        guard let name = promptText(
+            title: AppLanguage.text("ios.rename.title"),
+            message: AppLanguage.text("ios.rename.prompt", device.name),
+            defaultValue: device.name
+        ), name != device.name else {
+            return
+        }
+        model.renameSimulator(device, newName: name)
+    }
+
+    private func promptCreateSimulator() {
+        model.simulatorProvisioningOptions { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let error):
+                Alerts.error(AppLanguage.text("ios.create.unavailable"), error.localizedDescription)
+            case .success(let options):
+                guard let selection = self.showCreateSimulatorForm(
+                    deviceTypes: options.deviceTypes,
+                    runtimes: options.runtimes
+                ) else { return }
+                self.model.createSimulator(
+                    name: selection.name,
+                    deviceType: selection.deviceType,
+                    runtime: selection.runtime
+                )
+            }
+        }
+    }
+
+    private func showCreateSimulatorForm(
+        deviceTypes: [SimulatorDeviceType],
+        runtimes: [SimulatorRuntime]
+    ) -> (name: String, deviceType: String, runtime: String)? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+
+        let nameField = NSTextField(frame: NSRect(x: 0, y: 0, width: 330, height: 24))
+        nameField.stringValue = "Simulator_\(formatter.string(from: Date()))"
+
+        let deviceTypePopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 330, height: 26), pullsDown: false)
+        deviceTypePopup.addItems(withTitles: deviceTypes.map(\.name))
+
+        let runtimePopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 330, height: 26), pullsDown: false)
+        runtimePopup.addItems(withTitles: runtimes.map { "iOS \($0.version)" })
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        let fields: [(String, NSView)] = [
+            ("field.name", nameField),
+            ("ios.field.deviceType", deviceTypePopup),
+            ("ios.field.runtime", runtimePopup)
+        ]
+        let labels = fields.map { NSTextField(labelWithString: AppLanguage.text($0.0)) }
+        let labelWidth = ceil(labels.map { $0.intrinsicContentSize.width }.max() ?? 0)
+        for (label, field) in zip(labels, fields) {
+            let control = field.1
+            label.alignment = .right
+            label.widthAnchor.constraint(equalToConstant: labelWidth).isActive = true
+            control.widthAnchor.constraint(equalToConstant: 330).isActive = true
+            let row = NSStackView(views: [label, control])
+            row.orientation = .horizontal
+            row.spacing = 8
+            stack.addArrangedSubview(row)
+        }
+        stack.frame = NSRect(x: 0, y: 0, width: max(420, labelWidth + 338), height: 108)
+
+        let alert = NSAlert()
+        alert.messageText = AppLanguage.text("ios.create.title")
+        alert.informativeText = AppLanguage.text("ios.create.instructions")
+        alert.accessoryView = stack
+        alert.addButton(withTitle: AppLanguage.text("action.create"))
+        alert.addButton(withTitle: AppLanguage.text("action.cancel"))
+        alert.window.initialFirstResponder = nameField
+        NSApp.activate()
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+
+        let name = nameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            Alerts.error(AppLanguage.text("prompt.inputRequired"), AppLanguage.text("ios.create.enterName"))
+            return nil
+        }
+        let deviceTypeIndex = deviceTypePopup.indexOfSelectedItem
+        let runtimeIndex = runtimePopup.indexOfSelectedItem
+        guard deviceTypes.indices.contains(deviceTypeIndex), runtimes.indices.contains(runtimeIndex) else {
+            return nil
+        }
+        return (name, deviceTypes[deviceTypeIndex].identifier, runtimes[runtimeIndex].identifier)
     }
 
     // MARK: - 创建 AVD
