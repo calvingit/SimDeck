@@ -44,4 +44,9 @@ struct PanelActions {
     var screenshotSimulator: (SimulatorDevice) -> Void
     var sendIOSGesture: (SimulatorDevice, IOSGesture) -> Void
     var healSimulator: (SimulatorDevice) -> Void
+    var installAppSimulator: (SimulatorDevice) -> Void
+    var launchAppSimulator: (SimulatorDevice) -> Void
+    var terminateAppSimulator: (SimulatorDevice) -> Void
+    var openURLSimulator: (SimulatorDevice) -> Void
+    var openSimulatorLog: (SimulatorDevice) -> Void
 }

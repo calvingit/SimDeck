@@ -8,7 +8,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     init(model: AppModel, onWindowClosed: @escaping () -> Void) {
         self.onWindowClosed = onWindowClosed
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 660, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 660, height: 620),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

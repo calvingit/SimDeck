@@ -97,7 +97,27 @@ final class AppCoordinator {
             sendIOSGesture: { [weak self] device, gesture in
                 self?.model.sendIOSGesture(udid: device.udid, gesture)
             },
-            healSimulator: { [weak self] device in self?.confirmHealSimulator(device) }
+            healSimulator: { [weak self] device in self?.confirmHealSimulator(device) },
+            installAppSimulator: { [weak self] device in self?.promptInstallSimulatorApp(device) },
+            launchAppSimulator: { [weak self] device in
+                self?.promptSimulatorBundleID(
+                    title: AppLanguage.text("ios.app.launchTitle"),
+                    message: AppLanguage.text("ios.app.launchPrompt")
+                ) { self?.model.launchApp(on: device, bundleID: $0) }
+            },
+            terminateAppSimulator: { [weak self] device in
+                self?.promptSimulatorBundleID(
+                    title: AppLanguage.text("ios.app.terminateTitle"),
+                    message: AppLanguage.text("ios.app.terminatePrompt")
+                ) { self?.model.terminateApp(on: device, bundleID: $0) }
+            },
+            openURLSimulator: { [weak self] device in
+                self?.promptSimulatorBundleID(
+                    title: AppLanguage.text("ios.app.openURLTitle"),
+                    message: AppLanguage.text("ios.app.openURLPrompt")
+                ) { self?.model.openURL(on: device, url: $0) }
+            },
+            openSimulatorLog: { [weak self] device in self?.openSimulatorLog(device) }
         )
     }
 
@@ -225,6 +245,51 @@ final class AppCoordinator {
         model.renameSimulator(device, newName: name)
     }
 
+    private func promptInstallSimulatorApp(_ device: SimulatorDevice) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = AppLanguage.text("ios.app.installChoose")
+        panel.message = AppLanguage.text("ios.app.installMessage")
+        NSApp.activate()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard url.pathExtension == "app" else {
+            Alerts.error(
+                AppLanguage.text("ios.app.notAppBundle"),
+                AppLanguage.text("ios.app.notAppBundleDetail", url.path)
+            )
+            return
+        }
+        model.installApp(on: device, at: url.path)
+    }
+
+    /// bundle id / URL 输入框：launch、terminate、openurl 共用；取消或空输入不执行。
+    private func promptSimulatorBundleID(
+        title: String,
+        message: String,
+        action: @escaping (String) -> Void
+    ) {
+        guard let value = promptText(title: title, message: message, defaultValue: "") else { return }
+        action(value)
+    }
+
+    /// 用终端跟随 `xcrun simctl spawn <udid> log stream`；xcrun 取定位到的 simctl 同目录
+    /// （同一次 Xcode 选择），缺失时回退 /usr/bin/xcrun。
+    private func openSimulatorLog(_ device: SimulatorDevice) {
+        guard let simctlURL = model.simctlURL else { return }
+        let sibling = simctlURL.deletingLastPathComponent().appendingPathComponent("xcrun")
+        let xcrun = FileManager.default.isExecutableFile(atPath: sibling.path)
+            ? sibling.path
+            : "/usr/bin/xcrun"
+        let line = "\(shellQuote(xcrun)) simctl spawn \(shellQuote(device.udid)) log stream"
+        do {
+            try TerminalLauncher.open(command: line, filePrefix: "simctl-log", identifier: device.udid)
+        } catch {
+            Alerts.error(AppLanguage.text("terminal.openFailed"), error.localizedDescription)
+        }
+    }
+
     private func promptCreateSimulator() {
         model.simulatorProvisioningOptions { [weak self] result in
             guard let self else { return }
@@ -257,10 +322,22 @@ final class AppCoordinator {
         nameField.stringValue = "Simulator_\(formatter.string(from: Date()))"
 
         let deviceTypePopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 330, height: 26), pullsDown: false)
-        deviceTypePopup.addItems(withTitles: deviceTypes.map(\.name))
-
         let runtimePopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 330, height: 26), pullsDown: false)
         runtimePopup.addItems(withTitles: runtimes.map { "iOS \($0.version)" })
+
+        // 双选择器：runtime 变化时机型列表按其 supportedDeviceTypes 重建。
+        func repopulateDeviceTypes() {
+            let runtimeIndex = runtimePopup.indexOfSelectedItem
+            guard runtimes.indices.contains(runtimeIndex) else { return }
+            let supported = runtimes[runtimeIndex].filterDeviceTypes(deviceTypes)
+            deviceTypePopup.removeAllItems()
+            deviceTypePopup.addItems(withTitles: supported.map(\.name))
+        }
+        repopulateDeviceTypes()
+        // NSControl 不持有 target，闭包包装器由局部强引用保活到 runModal 返回。
+        let runtimeTarget = ClosureActionTarget(repopulateDeviceTypes)
+        runtimePopup.target = runtimeTarget
+        runtimePopup.action = #selector(ClosureActionTarget.fire(_:))
 
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -268,8 +345,8 @@ final class AppCoordinator {
         stack.spacing = 8
         let fields: [(String, NSView)] = [
             ("field.name", nameField),
-            ("ios.field.deviceType", deviceTypePopup),
-            ("ios.field.runtime", runtimePopup)
+            ("ios.field.runtime", runtimePopup),
+            ("ios.field.deviceType", deviceTypePopup)
         ]
         let labels = fields.map { NSTextField(labelWithString: AppLanguage.text($0.0)) }
         let labelWidth = ceil(labels.map { $0.intrinsicContentSize.width }.max() ?? 0)
@@ -302,10 +379,11 @@ final class AppCoordinator {
         }
         let deviceTypeIndex = deviceTypePopup.indexOfSelectedItem
         let runtimeIndex = runtimePopup.indexOfSelectedItem
-        guard deviceTypes.indices.contains(deviceTypeIndex), runtimes.indices.contains(runtimeIndex) else {
-            return nil
-        }
-        return (name, deviceTypes[deviceTypeIndex].identifier, runtimes[runtimeIndex].identifier)
+        guard runtimes.indices.contains(runtimeIndex) else { return nil }
+        let selectedRuntime = runtimes[runtimeIndex]
+        let selectedTypes = selectedRuntime.filterDeviceTypes(deviceTypes)
+        guard selectedTypes.indices.contains(deviceTypeIndex) else { return nil }
+        return (name, selectedTypes[deviceTypeIndex].identifier, selectedRuntime.identifier)
     }
 
     // MARK: - 创建 AVD
@@ -543,7 +621,7 @@ final class AppCoordinator {
         let subcommand = command == .shell ? "shell" : "logcat"
         let line = "\(shellQuote(adb.path)) -s \(shellQuote(device.serial)) \(subcommand)"
         do {
-            try TerminalLauncher.open(command: line, identifier: device.serial)
+            try TerminalLauncher.open(command: line, filePrefix: "adb", identifier: device.serial)
         } catch {
             Alerts.error(AppLanguage.text("terminal.openFailed"), error.localizedDescription)
         }
@@ -642,7 +720,8 @@ final class AppCoordinator {
 }
 
 private enum TerminalLauncher {
-    static func open(command: String, identifier: String) throws {
+    /// filePrefix 区分用途（adb=Android 终端，simctl-log=iOS 日志），identifier 为设备序号/UDID。
+    static func open(command: String, filePrefix: String, identifier: String) throws {
         let directory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/AVDMenuBar/scripts", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -651,7 +730,7 @@ private enum TerminalLauncher {
                 ? character
                 : "_"
         }
-        let url = directory.appendingPathComponent("adb-\(String(safeName)).command")
+        let url = directory.appendingPathComponent("\(filePrefix)-\(String(safeName)).command")
         try "#!/bin/zsh\n\(command)\n".write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o755],
@@ -664,5 +743,18 @@ private enum TerminalLauncher {
                 userInfo: [NSLocalizedDescriptionKey: AppLanguage.text("terminal.handlerMissing")]
             )
         }
+    }
+}
+
+/// NSPopUpButton 等控件的闭包 target；AppCoordinator 不是 NSObject，无法直接承载 @objc action。
+private final class ClosureActionTarget: NSObject {
+    private let handler: () -> Void
+
+    init(_ handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func fire(_ sender: Any?) {
+        handler()
     }
 }

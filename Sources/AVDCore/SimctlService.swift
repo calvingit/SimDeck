@@ -33,15 +33,8 @@ public final class SimctlService: @unchecked Sendable {
         if let developerDir = environment["DEVELOPER_DIR"], !developerDir.isEmpty {
             candidates.append((developerDir as NSString).expandingTildeInPath)
         }
-        if let result = try? CommandRunner.run(
-            URL(fileURLWithPath: "/usr/bin/xcode-select"),
-            ["-p"],
-            timeout: 10
-        ), result.status == 0 {
-            let directory = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !directory.isEmpty {
-                candidates.append(directory)
-            }
+        if let directory = queryDeveloperDirectory() {
+            candidates.append(directory)
         }
         for candidate in candidates {
             let simctl = URL(fileURLWithPath: candidate).appendingPathComponent("usr/bin/simctl")
@@ -50,6 +43,23 @@ public final class SimctlService: @unchecked Sendable {
             }
         }
         return nil
+    }
+
+    /// `xcode-select -p` 输出的开发目录；未配置或查询失败返回 nil（只查询，不弹安装提示）。
+    public static func queryDeveloperDirectory(
+        files: FileManager = .default
+    ) -> String? {
+        guard let result = try? CommandRunner.run(
+            URL(fileURLWithPath: "/usr/bin/xcode-select"),
+            ["-p"],
+            timeout: 10
+        ), result.status == 0 else {
+            return nil
+        }
+        let directory = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !directory.isEmpty else { return nil }
+        // 核对一次目录真实存在，避免设置页展示失效路径。
+        return files.fileExists(atPath: directory) ? directory : nil
     }
 
     // MARK: - 列表
@@ -126,6 +136,50 @@ public final class SimctlService: @unchecked Sendable {
             try shutdown(udid: udid)
         }
         try runOK(["erase", udid])
+    }
+
+    // MARK: - App 管理
+
+    /// 安装 .app bundle（路径指向 app 包目录）。安装可能耗时较长，超时放宽到 5 分钟。
+    public func installApp(udid: String, appBundlePath: String) throws {
+        try runOK(["install", udid, appBundlePath], timeout: 300)
+    }
+
+    public func uninstallApp(udid: String, bundleID: String) throws {
+        try runOK(["uninstall", udid, bundleID], timeout: 120)
+    }
+
+    /// 启动已安装的应用；stdout 为进程 pid（原样返回，失败抛错）。
+    @discardableResult
+    public func launchApp(udid: String, bundleID: String) throws -> String {
+        let result = try run(["launch", udid, bundleID])
+        guard result.status == 0 else {
+            throw CommandRunnerError.nonZero(status: result.status, stderr: result.failureDetail)
+        }
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public func terminateApp(udid: String, bundleID: String) throws {
+        try runOK(["terminate", udid, bundleID])
+    }
+
+    /// 通过 URL scheme 打开链接（simctl openurl）；stdout 原样返回。
+    @discardableResult
+    public func openURL(udid: String, url: String) throws -> String {
+        let result = try run(["openurl", udid, url])
+        guard result.status == 0 else {
+            throw CommandRunnerError.nonZero(status: result.status, stderr: result.failureDetail)
+        }
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 已安装的应用（含系统应用），按 bundle id 升序。listapps 输出为 XML plist。
+    public func listApps(udid: String) throws -> [SimulatorApp] {
+        let result = try run(["listapps", udid], timeout: 120)
+        guard result.status == 0 else {
+            throw CommandRunnerError.nonZero(status: result.status, stderr: result.failureDetail)
+        }
+        return try SimctlJSONParser.parseApps(result.stdout)
     }
 
     // MARK: - 截图
@@ -222,11 +276,13 @@ enum SimctlJSONParser {
         var runtimes = list.compactMap { dto -> SimulatorRuntime? in
             guard let identifier = dto.identifier, !identifier.isEmpty,
                   let version = dto.version, !version.isEmpty else { return nil }
+            let supported = (dto.supportedDeviceTypes ?? []).compactMap(deviceType(from:))
             return SimulatorRuntime(
                 identifier: identifier,
                 version: version,
                 buildVersion: dto.buildversion,
-                isAvailable: dto.isAvailable ?? false
+                isAvailable: dto.isAvailable ?? false,
+                supportedDeviceTypes: supported
             )
         }
         runtimes.sort { compareVersions($0.version, $1.version) == .orderedDescending }
@@ -238,17 +294,37 @@ enum SimctlJSONParser {
         guard let list = payload.deviceTypes else {
             throw SimctlParseError.malformed("missing devicetypes")
         }
-        let types = list.compactMap { dto -> SimulatorDeviceType? in
-            guard let identifier = dto.identifier, !identifier.isEmpty else { return nil }
-            return SimulatorDeviceType(
-                identifier: identifier,
-                name: dto.name ?? "",
-                productFamily: dto.productFamily
-            )
-        }
+        let types = list.compactMap(deviceType(from:))
         return types.sorted {
             $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
+    }
+
+    /// `simctl listapps` 输出（XML plist，按 bundle id 分组的字典）→ 已安装应用。
+    /// CFBundleIdentifier 缺失时回退键名；名称依次取 CFBundleDisplayName / CFBundleName / bundle id。
+    static func parseApps(_ plist: String) throws -> [SimulatorApp] {
+        guard let data = plist.data(using: .utf8) else {
+            throw SimctlParseError.malformed("listapps: not UTF-8")
+        }
+        var format = PropertyListSerialization.PropertyListFormat.xml
+        guard let root = try? PropertyListSerialization.propertyList(
+            from: data, options: [], format: &format
+        ), let apps = root as? [String: [String: Any]] else {
+            throw SimctlParseError.malformed("listapps: not a plist dictionary")
+        }
+        return apps.compactMap { key, entry -> SimulatorApp? in
+            let bundleID = (entry["CFBundleIdentifier"] as? String) ?? key
+            guard !bundleID.isEmpty else { return nil }
+            let name = (entry["CFBundleDisplayName"] as? String)
+                ?? (entry["CFBundleName"] as? String)
+                ?? bundleID
+            return SimulatorApp(
+                bundleID: bundleID,
+                name: name,
+                version: entry["CFBundleShortVersionString"] as? String
+            )
+        }
+        .sorted { $0.bundleID.localizedStandardCompare($1.bundleID) == .orderedAscending }
     }
 
     /// runtime 分组键 → 版本号；只接受 iOS runtime，其余平台（watchOS 等）返回 nil。
@@ -308,6 +384,7 @@ private extension SimctlJSONParser {
         let version: String?
         let buildversion: String?
         let isAvailable: Bool?
+        let supportedDeviceTypes: [DeviceTypeDTO]?
     }
 
     struct DeviceTypesPayload: Decodable {
@@ -322,5 +399,15 @@ private extension SimctlJSONParser {
         let identifier: String?
         let name: String?
         let productFamily: String?
+    }
+
+    /// 机型 DTO → 模型；缺 identifier 的条目跳过。runtime 与 devicetypes 两个 JSON 共用。
+    static func deviceType(from dto: DeviceTypeDTO) -> SimulatorDeviceType? {
+        guard let identifier = dto.identifier, !identifier.isEmpty else { return nil }
+        return SimulatorDeviceType(
+            identifier: identifier,
+            name: dto.name ?? "",
+            productFamily: dto.productFamily
+        )
     }
 }

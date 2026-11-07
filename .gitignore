@@ -2,3 +2,5 @@
 build/
 .DS_Store
 .swiftpm/
+# 内嵌 baguette 的 vendored 二进制，不入库（获取步骤见 README）
+Vendor/

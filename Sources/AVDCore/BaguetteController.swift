@@ -56,14 +56,19 @@ public final class BaguetteController: @unchecked Sendable {
 
     // MARK: - 二进制发现与能力
 
-    /// baguette 二进制定位：优先 app bundle 内 Resources/Helpers/Baguette（内嵌打包，见设计决策 3），
-    /// 其次 PATH。都找不到返回 nil——增强档缺席，基础档（截图轮询）仍可用。
+    /// baguette 二进制定位：优先设置里的路径覆盖，其次 app bundle 内
+    /// Resources/Helpers/Baguette（内嵌打包，见设计决策 3），最后 PATH。
+    /// 都找不到返回 nil——增强档缺席，基础档（截图轮询）仍可用。
     public static func locateBinary(
+        overridePath: String? = nil,
         bundleResourceURL: URL? = Bundle.main.resourceURL,
         searchPath: String? = ProcessInfo.processInfo.environment["PATH"],
         files: FileManager = .default
     ) -> URL? {
         var candidates: [String] = []
+        if let overridePath, !overridePath.isEmpty {
+            candidates.append((overridePath as NSString).expandingTildeInPath)
+        }
         if let bundleResourceURL {
             candidates.append(bundleResourceURL.appendingPathComponent("Helpers/Baguette").path)
         }
@@ -78,6 +83,17 @@ public final class BaguetteController: @unchecked Sendable {
             }
         }
         return nil
+    }
+
+    /// `baguette --version`（根命令的版本旗标，输出如 "0.2.13"）；失败或无输出返回 nil，
+    /// 调用方仅把版本作为展示信息，不据此改变功能。
+    public static func version(of binary: URL) -> String? {
+        guard let result = try? CommandRunner.run(binary, ["--version"], timeout: 10),
+              result.status == 0 else {
+            return nil
+        }
+        let text = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
     }
 
     /// 增强档运行门槛（设计决策 2）：macOS 15+ 且 Apple Silicon（内嵌 baguette 的构建目标）。

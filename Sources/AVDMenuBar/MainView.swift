@@ -572,6 +572,19 @@ struct MainView: View {
         Menu {
             Button(AppLanguage.text("action.screenshot")) { actions.screenshotSimulator(simulator) }
                 .disabled(!simulator.isBooted)
+            Button(AppLanguage.text("ios.menu.installApp")) { actions.installAppSimulator(simulator) }
+                .disabled(!simulator.isBooted)
+            Divider()
+            Button(AppLanguage.text("ios.menu.launchApp")) { actions.launchAppSimulator(simulator) }
+                .disabled(!simulator.isBooted)
+            Button(AppLanguage.text("ios.menu.terminateApp")) { actions.terminateAppSimulator(simulator) }
+                .disabled(!simulator.isBooted)
+            Button(AppLanguage.text("ios.menu.openURL")) { actions.openURLSimulator(simulator) }
+                .disabled(!simulator.isBooted)
+            Divider()
+            // 日志走 `simctl spawn`，要求设备已启动。
+            Button(AppLanguage.text("ios.menu.logs")) { actions.openSimulatorLog(simulator) }
+                .disabled(!simulator.isBooted)
             Button(AppLanguage.text("ios.menu.rename")) { actions.renameSimulator(simulator) }
             Divider()
             // erase/delete 运行中可用（erase 由服务层先关机），无需先停用。

@@ -240,6 +240,57 @@ final class SimctlJSONTests: XCTestCase {
         XCTAssertFalse(watchOS.isAvailable)
     }
 
+    func testParseRuntimesCapturesSupportedDeviceTypes() throws {
+        let runtimes = try SimctlJSONParser.parseRuntimes(Self.runtimesJSON)
+
+        // fixture 中 iOS 18.6 带一条 supportedDeviceTypes，iOS 27.0 未输出该字段。
+        let ios18 = try XCTUnwrap(runtimes.first { $0.version == "18.6" })
+        XCTAssertEqual(ios18.supportedDeviceTypes.map(\.identifier), [
+            "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"
+        ])
+        XCTAssertEqual(ios18.supportedDeviceTypes.first?.name, "iPhone 16 Pro")
+        XCTAssertEqual(ios18.supportedDeviceTypes.first?.productFamily, "iPhone")
+
+        let ios27 = try XCTUnwrap(runtimes.first { $0.version == "27.0" })
+        XCTAssertTrue(ios27.supportedDeviceTypes.isEmpty, "缺字段解码为空数组，不崩溃")
+    }
+
+    /// 创建向导的机型过滤：优先 runtime 声明的 supportedDeviceTypes，
+    /// 未声明（老版本 simctl）时回退全部候选。
+    func testFilterDeviceTypesByRuntimeSupport() throws {
+        let candidates = try SimctlJSONParser.parseDeviceTypes(Self.deviceTypesJSON)
+        XCTAssertEqual(candidates.map(\.identifier), [
+            "com.apple.CoreSimulator.SimDeviceType.iPhone-16",
+            "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro"
+        ])
+
+        let supporting = SimulatorRuntime(
+            identifier: "com.apple.CoreSimulator.SimRuntime.iOS-18-6",
+            version: "18.6",
+            buildVersion: nil,
+            isAvailable: true,
+            supportedDeviceTypes: [
+                SimulatorDeviceType(
+                    identifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                    name: "iPhone 17 Pro",
+                    productFamily: nil
+                )
+            ]
+        )
+        XCTAssertEqual(supporting.filterDeviceTypes(candidates).map(\.identifier), [
+            "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro"
+        ])
+
+        let undeclared = SimulatorRuntime(
+            identifier: "com.apple.CoreSimulator.SimRuntime.iOS-27-0",
+            version: "27.0",
+            buildVersion: nil,
+            isAvailable: true,
+            supportedDeviceTypes: []
+        )
+        XCTAssertEqual(undeclared.filterDeviceTypes(candidates).map(\.identifier), candidates.map(\.identifier))
+    }
+
     func testParseDeviceTypes() throws {
         let types = try SimctlJSONParser.parseDeviceTypes(Self.deviceTypesJSON)
         XCTAssertEqual(types.count, 2)

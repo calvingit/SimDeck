@@ -148,6 +148,55 @@ final class BaguetteMockE2ETests: XCTestCase {
         )
     }
 
+    /// 设置里的路径覆盖优先级最高（内嵌副本与 PATH 之前）。
+    func testLocateBinaryPrefersOverridePath() throws {
+        let bundleResourceURL = root.appendingPathComponent("MockApp.app/Contents/Resources")
+        try FileManager.default.createDirectory(
+            at: bundleResourceURL.appendingPathComponent("Helpers"),
+            withIntermediateDirectories: true
+        )
+        try writeScript(at: bundleResourceURL.appendingPathComponent("Helpers/Baguette"), contents: "#!/bin/sh\n")
+
+        let overrideDirectory = root.appendingPathComponent("overridedir")
+        try FileManager.default.createDirectory(at: overrideDirectory, withIntermediateDirectories: true)
+        let overrideBinary = overrideDirectory.appendingPathComponent("Baguette")
+        try writeScript(at: overrideBinary, contents: "#!/bin/sh\n")
+
+        XCTAssertEqual(
+            BaguetteController.locateBinary(
+                overridePath: overrideBinary.path,
+                bundleResourceURL: bundleResourceURL,
+                searchPath: nil
+            ),
+            overrideBinary,
+            "覆盖路径优先于内嵌副本"
+        )
+        // 覆盖路径不可执行时照常回退内嵌副本。
+        XCTAssertEqual(
+            BaguetteController.locateBinary(
+                overridePath: root.appendingPathComponent("missing").path,
+                bundleResourceURL: bundleResourceURL,
+                searchPath: nil
+            ),
+            bundleResourceURL.appendingPathComponent("Helpers/Baguette")
+        )
+    }
+
+    /// 版本来自根命令的 `--version` 旗标（ArgumentParser CommandConfiguration(version:)）。
+    func testVersionReadsVersionFlagOutput() throws {
+        let versioned = root.appendingPathComponent("baguette-version")
+        try writeScript(at: versioned, contents: "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"0.2.13\"; fi\n")
+        XCTAssertEqual(BaguetteController.version(of: versioned), "0.2.13")
+
+        let failing = root.appendingPathComponent("baguette-version-fail")
+        try writeScript(at: failing, contents: "#!/bin/sh\nexit 1\n")
+        XCTAssertNil(BaguetteController.version(of: failing), "读取失败返回 nil，版本仅作展示")
+
+        let silent = root.appendingPathComponent("baguette-version-silent")
+        try writeScript(at: silent, contents: "#!/bin/sh\n")
+        XCTAssertNil(BaguetteController.version(of: silent), "空输出返回 nil")
+    }
+
     func testEnhancedTierRequiresSystemSupport() {
         XCTAssertFalse(
             BaguetteController.isEnhancedTierSupported(

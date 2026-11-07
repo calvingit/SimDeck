@@ -58,6 +58,35 @@ final class SimctlMockE2ETests: XCTestCase {
           ]
         }
         """.write(to: root.appendingPathComponent("devicetypes.json"), atomically: true, encoding: .utf8)
+        try """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>com.example.demo</key>
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.example.demo</string>
+            <key>CFBundleDisplayName</key>
+            <string>Demo</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.2.3</string>
+          </dict>
+          <key>com.example.noname</key>
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.example.noname</string>
+          </dict>
+          <key>com.apple.Preferences</key>
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.apple.Preferences</string>
+            <key>CFBundleName</key>
+            <string>Settings</string>
+          </dict>
+        </dict>
+        </plist>
+        """.write(to: root.appendingPathComponent("listapps.plist"), atomically: true, encoding: .utf8)
 
         try writeScript(at: root.appendingPathComponent("simctl"), contents: simctlScript())
 
@@ -143,6 +172,54 @@ final class SimctlMockE2ETests: XCTestCase {
         XCTAssertTrue(recordedCommands().contains("rename \(Self.bootedUDID) Renamed iPhone"))
     }
 
+    // MARK: - App 管理
+
+    func testInstallUninstallTerminateRecordArguments() throws {
+        try service.installApp(udid: Self.bootedUDID, appBundlePath: "/tmp/Demo.app")
+        try service.uninstallApp(udid: Self.bootedUDID, bundleID: "com.example.demo")
+        try service.terminateApp(udid: Self.bootedUDID, bundleID: "com.example.demo")
+
+        let record = recordedCommands()
+        XCTAssertTrue(record.contains("install \(Self.bootedUDID) /tmp/Demo.app"))
+        XCTAssertTrue(record.contains("uninstall \(Self.bootedUDID) com.example.demo"))
+        XCTAssertTrue(record.contains("terminate \(Self.bootedUDID) com.example.demo"))
+    }
+
+    func testLaunchAppReturnsPidFromStdout() throws {
+        let pid = try service.launchApp(udid: Self.bootedUDID, bundleID: "com.example.demo")
+        XCTAssertEqual(pid, "12345", "simctl launch 的 stdout 是进程 pid")
+        XCTAssertTrue(recordedCommands().contains("launch \(Self.bootedUDID) com.example.demo"))
+    }
+
+    func testOpenURLRecordsArgumentsAndReturnsStdout() throws {
+        let output = try service.openURL(udid: Self.bootedUDID, url: "myapp://demo")
+        XCTAssertEqual(output, "")
+        XCTAssertTrue(recordedCommands().contains("openurl \(Self.bootedUDID) myapp://demo"))
+    }
+
+    func testListAppsParsesPlistOutput() throws {
+        let apps = try service.listApps(udid: Self.bootedUDID)
+
+        XCTAssertEqual(apps.map(\.bundleID), [
+            "com.apple.Preferences",
+            "com.example.demo",
+            "com.example.noname"
+        ], "按 bundle id 升序")
+
+        let demo = try XCTUnwrap(apps.first { $0.bundleID == "com.example.demo" })
+        XCTAssertEqual(demo.name, "Demo")
+        XCTAssertEqual(demo.version, "1.2.3")
+        let settings = try XCTUnwrap(apps.first { $0.bundleID == "com.apple.Preferences" })
+        XCTAssertEqual(settings.name, "Settings", "显示名优先取 CFBundleDisplayName")
+        let noName = try XCTUnwrap(apps.first { $0.bundleID == "com.example.noname" })
+        XCTAssertEqual(noName.name, "com.example.noname", "缺名称字段回退 bundle id")
+        XCTAssertNil(noName.version)
+    }
+
+    func testListAppsRejectsBrokenOutput() {
+        XCTAssertThrowsError(try service.listApps(udid: Self.bootingUDID))
+    }
+
     // MARK: - 截图与影子检测
 
     func testScreenshotWritesToTempFileAndReadsBack() throws {
@@ -205,6 +282,16 @@ final class SimctlMockE2ETests: XCTestCase {
             ;;
           create)
             echo "NEW-UDID-0001"
+            ;;
+          listapps)
+            if [ "$2" = "\(Self.bootedUDID)" ]; then
+              cat "\(root.appendingPathComponent("listapps.plist").path)"
+            else
+              echo "not a plist"
+            fi
+            ;;
+          launch)
+            echo "12345"
             ;;
           io)
             if [ "$3" = "screenshot" ] && [ "$2" = "\(Self.bootedUDID)" ]; then

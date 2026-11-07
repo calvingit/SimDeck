@@ -28,6 +28,8 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 pathsSection
                 Divider()
+                iosSection
+                Divider()
                 loginSection
                 Divider()
                 appearanceSection
@@ -36,7 +38,7 @@ struct SettingsView: View {
             }
             .padding(22)
         }
-        .frame(width: 660, height: 520)
+        .frame(width: 660, height: 620)
     }
 
     private var pathsSection: some View {
@@ -50,8 +52,14 @@ struct SettingsView: View {
             pathRow("adb", detected: model.tools?.adb?.path, keyPath: \.adbPath)
 
             HStack {
+                // “使用自动检测”只清 Android 工具覆盖，不影响 iOS 段的 baguette 覆盖。
                 Button(AppLanguage.text("settings.tools.useAuto")) {
-                    updateDraft(SettingsDraft(avdmanagerPath: "", emulatorPath: "", adbPath: ""))
+                    updateDraft(SettingsDraft(
+                        avdmanagerPath: "",
+                        emulatorPath: "",
+                        adbPath: "",
+                        baguettePath: draft.baguettePath
+                    ))
                     runTest()
                 }
                 Button(AppLanguage.text("settings.tools.test"), action: runTest).disabled(testID != nil)
@@ -76,6 +84,47 @@ struct SettingsView: View {
                 }
                 .frame(height: 76)
             }
+        }
+    }
+
+    private var iosSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(AppLanguage.text("settings.ios"), systemImage: "iphone").font(.headline)
+            Text(AppLanguage.text("settings.ios.help"))
+                .font(.caption).foregroundStyle(.secondary)
+
+            infoRow(AppLanguage.text("settings.ios.developerDir"), value: developerDirectoryText)
+            infoRow(AppLanguage.text("settings.ios.baguette"), value: baguetteStatusText)
+            if let baguettePath = model.resolvedBaguettePath {
+                infoRow(AppLanguage.text("settings.ios.baguettePath"), value: baguettePath)
+            }
+            pathRow("baguette", detected: model.resolvedBaguettePath, keyPath: \.baguettePath)
+        }
+    }
+
+    private var developerDirectoryText: String {
+        model.developerDirectory ?? AppLanguage.text("settings.ios.developerDirMissing")
+    }
+
+    private var baguetteStatusText: String {
+        guard model.baguetteURL != nil else {
+            return AppLanguage.text("settings.ios.baguette.missing")
+        }
+        if let version = model.baguetteVersion {
+            return AppLanguage.text("settings.ios.baguette.found", version)
+        }
+        return AppLanguage.text("settings.ios.baguette.foundUnknown")
+    }
+
+    private func infoRow(_ label: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .frame(width: 92, alignment: .leading)
+            Text(value)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .help(value)
         }
     }
 

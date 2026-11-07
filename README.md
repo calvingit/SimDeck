@@ -19,6 +19,30 @@ A native macOS menu bar app for managing local Android Virtual Devices (AVDs) an
 - Create, rename, and move AVDs.
 - Pin the panel or frequently used AVDs; optional launch at login.
 
+## iOS Simulator support
+
+With full Xcode (or the Command Line Tools) installed, the app also manages iOS simulators in the same panel and main window as Android devices.
+
+- **Basic tier** (always available with Xcode): list, boot, shut down, restart, create (device types filtered by the selected iOS version), rename, delete, and erase with confirmation dialogs; screenshot polling preview; screenshots; app management (install a .app bundle, launch/terminate by bundle id, open URL); and simulator logs in a terminal (`xcrun simctl spawn <udid> log stream`).
+- **Enhanced tier** (requires bundled baguette; macOS 15+ on Apple Silicon): live H.264 preview, touch/swipe/two-finger gestures, and Home/Lock/Volume keys. When the stream is unavailable, the preview automatically falls back to screenshot polling.
+
+### Bundling baguette (optional)
+
+`scripts/build-app.sh` embeds baguette when `Vendor/baguette/` is present:
+
+1. Download `baguette_v0.2.13_macOS_arm64.tar.gz` from the [baguette v0.2.13 release](https://github.com/tddworks/baguette/releases/tag/v0.2.13).
+2. Verify the checksum:
+
+   ```bash
+   shasum -a 256 baguette_v0.2.13_macOS_arm64.tar.gz
+   # 9082478a8e6748fd46123533f004c41c815d97e087242f7dab55b6a5be758b38
+   ```
+
+3. Extract the archive and put `Baguette` and `Baguette_Baguette.bundle` into `Vendor/baguette/`.
+4. Run `./scripts/build-app.sh`; the binary and its bundle are copied to `AVDMenuBar.app/Contents/Resources/Helpers/` and ad-hoc signed.
+
+Without `Vendor/baguette/` the build prints a notice and ships the basic tier only. The baguette binary is not committed to this repository. You can also point the app at an external copy in Settings → iOS Simulators.
+
 ## Requirements
 
 - macOS 14 or later.

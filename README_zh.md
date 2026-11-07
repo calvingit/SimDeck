@@ -19,6 +19,30 @@
 - 创建、重命名、移动 AVD。
 - 面板与常用 AVD 可置顶；可选登录时启动。
 
+## iOS 模拟器支持
+
+安装了完整 Xcode（或 Command Line Tools）时，应用会同时管理 iOS 模拟器，与 Android 设备共用面板和主窗口。
+
+- **基础档**（有 Xcode 即可用）：列表、启动、关机、重启、创建（机型随所选 iOS 版本过滤）、重命名、删除、抹掉（均有确认弹窗）；截图轮询预览；截图保存；App 管理（安装 .app 包、按 bundle id 启动/终止、打开 URL）；在终端打开模拟器日志（`xcrun simctl spawn <udid> log stream`）。
+- **增强档**（需内嵌 baguette；macOS 15+ 且 Apple Silicon）：实时 H.264 预览、触摸/滑动/双指手势、Home/Lock/音量按键；串流不可用时自动降级为截图轮询。
+
+### 内嵌 baguette（可选）
+
+存在 `Vendor/baguette/` 时，`scripts/build-app.sh` 会把它内嵌进产物：
+
+1. 从 [baguette v0.2.13 release](https://github.com/tddworks/baguette/releases/tag/v0.2.13) 下载 `baguette_v0.2.13_macOS_arm64.tar.gz`。
+2. 核对校验和：
+
+   ```bash
+   shasum -a 256 baguette_v0.2.13_macOS_arm64.tar.gz
+   # 9082478a8e6748fd46123533f004c41c815d97e087242f7dab55b6a5be758b38
+   ```
+
+3. 解压，把 `Baguette` 与 `Baguette_Baguette.bundle` 放入 `Vendor/baguette/`。
+4. 运行 `./scripts/build-app.sh`；二进制与资源包会拷贝到 `AVDMenuBar.app/Contents/Resources/Helpers/` 并 ad-hoc 签名。
+
+缺少 `Vendor/baguette/` 时构建打印提示并跳过，产物只含基础档。baguette 二进制不入库；也可以在「设置 → iOS 模拟器」中把 baguette 指向外部副本。
+
 ## 环境要求
 
 - macOS 14 或更新版本。

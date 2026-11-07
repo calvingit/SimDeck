@@ -32,17 +32,20 @@ struct SettingsDraft: Equatable {
     var avdmanagerPath: String
     var emulatorPath: String
     var adbPath: String
+    var baguettePath: String
 
     static let avdmanagerKey = "avdmanagerPathOverride"
     static let emulatorKey = "emulatorPathOverride"
     static let adbKey = "adbPathOverride"
+    static let baguetteKey = "baguettePathOverride"
 
     static func load() -> SettingsDraft {
         let defaults = UserDefaults.standard
         return SettingsDraft(
             avdmanagerPath: defaults.string(forKey: avdmanagerKey) ?? "",
             emulatorPath: defaults.string(forKey: emulatorKey) ?? "",
-            adbPath: defaults.string(forKey: adbKey) ?? ""
+            adbPath: defaults.string(forKey: adbKey) ?? "",
+            baguettePath: defaults.string(forKey: baguetteKey) ?? ""
         )
     }
 
@@ -51,6 +54,7 @@ struct SettingsDraft: Equatable {
         defaults.set(avdmanagerPath, forKey: Self.avdmanagerKey)
         defaults.set(emulatorPath, forKey: Self.emulatorKey)
         defaults.set(adbPath, forKey: Self.adbKey)
+        defaults.set(baguettePath, forKey: Self.baguetteKey)
     }
 }
 
@@ -66,12 +70,17 @@ final class AppModel: ObservableObject {
     private var provisioning: AVDProvisioningService?
     private var simctl: SimctlService?
     private var simulatorMonitor: SimulatorMonitor?
+    /// 系统定位到的 simctl；iOS 日志菜单要借用同目录的 xcrun。
+    private(set) var simctlURL: URL?
     let adbStreamer = ADBH264Streamer()
     let baguetteStreamer = BaguetteController()
     let baguetteInput = BaguetteInputSession()
-    private var baguetteURL: URL?
+    private(set) var baguetteURL: URL?
     /// 增强档可用性（baguette 已找到且 macOS 15+/arm64），installSimctlTools 时确定。
     private(set) var isEnhancedTierAvailable = false
+    /// 设置页展示：开发目录与生效的 baguette（含版本）。
+    @Published private(set) var developerDirectory: String?
+    @Published private(set) var baguetteVersion: String?
 
     @Published private(set) var avds: [AVD] = []
     @Published private(set) var running: [RunningEmulator] = []
@@ -164,6 +173,7 @@ final class AppModel: ObservableObject {
     func loadConfiguration() {
         installSimctlTools()
         let draft = currentDraft()
+        resolveBaguette(overridePath: draft.baguettePath)
         do {
             let resolved = try ToolLocator.resolve(
                 avdmanagerOverride: draft.avdmanagerPath,
@@ -186,6 +196,7 @@ final class AppModel: ObservableObject {
                 adbOverride: draft.adbPath
             )
             installTools(resolved)
+            resolveBaguette(overridePath: draft.baguettePath)
             draft.persist()
             listError = nil
             runtimeError = nil
@@ -203,10 +214,36 @@ final class AppModel: ObservableObject {
         guard let simctlURL = SimctlService.locateSystemSimctl() else { return }
         let service = SimctlService(simctl: simctlURL)
         simctl = service
+        self.simctlURL = simctlURL
         simulatorMonitor = SimulatorMonitor(simctl: service)
-        baguetteURL = BaguetteController.locateBinary()
-        isEnhancedTierAvailable = baguetteURL != nil && BaguetteController.isEnhancedTierSupported()
+        developerDirectory = SimctlService.queryDeveloperDirectory()
     }
+
+    /// 按覆盖路径重新定位 baguette 并刷新增强档可用性与版本。
+    /// 路径变化时停掉在跑的 stream/input，让它们下次按新二进制重启；
+    /// 版本读取是子进程调用，放后台队列，结果仅作展示。
+    private func resolveBaguette(overridePath: String) {
+        let previous = baguetteURL
+        let located = BaguetteController.locateBinary(overridePath: overridePath)
+        baguetteURL = located
+        isEnhancedTierAvailable = located != nil && BaguetteController.isEnhancedTierSupported()
+        if previous != located {
+            baguetteStreamer.stop()
+            baguetteInput.stop()
+        }
+        baguetteVersion = nil
+        guard let located else { return }
+        queue.async { [weak self] in
+            let version = BaguetteController.version(of: located)
+            DispatchQueue.main.async {
+                guard let self, self.baguetteURL == located else { return }
+                self.baguetteVersion = version
+            }
+        }
+    }
+
+    /// 设置页展示的生效 baguette 路径（覆盖 > 内嵌 > PATH）。
+    var resolvedBaguettePath: String? { baguetteURL?.path }
 
     private func installTools(_ resolved: ToolPaths) {
         tools = resolved
@@ -740,6 +777,63 @@ final class AppModel: ObservableObject {
                 }
             } catch {
                 DispatchQueue.main.async { completion(.failure(error)) }
+            }
+        }
+    }
+
+    // MARK: - iOS App 管理
+
+    /// 安装 .app（耗时操作，占用 busy 状态）；完成后刷新列表。
+    func installApp(on device: SimulatorDevice, at path: String) {
+        guard let simctl, !busySimulators.contains(device.udid) else { return }
+        busySimulators.insert(device.udid)
+        queue.async { [weak self] in
+            do {
+                try simctl.installApp(udid: device.udid, appBundlePath: path)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.refreshSimulators()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.busySimulators.remove(device.udid)
+                    self.onError?(AppLanguage.text("ios.app.installFailed", device.name), error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func launchApp(on device: SimulatorDevice, bundleID: String) {
+        guard let simctl else { return }
+        queue.async { [weak self] in
+            do {
+                try simctl.launchApp(udid: device.udid, bundleID: bundleID)
+            } catch {
+                self?.reportOperationError(AppLanguage.text("ios.app.launchFailed", bundleID), error)
+            }
+        }
+    }
+
+    func terminateApp(on device: SimulatorDevice, bundleID: String) {
+        guard let simctl else { return }
+        queue.async { [weak self] in
+            do {
+                try simctl.terminateApp(udid: device.udid, bundleID: bundleID)
+            } catch {
+                self?.reportOperationError(AppLanguage.text("ios.app.terminateFailed", bundleID), error)
+            }
+        }
+    }
+
+    func openURL(on device: SimulatorDevice, url: String) {
+        guard let simctl else { return }
+        queue.async { [weak self] in
+            do {
+                try simctl.openURL(udid: device.udid, url: url)
+            } catch {
+                self?.reportOperationError(AppLanguage.text("ios.app.openURLFailed", url), error)
             }
         }
     }

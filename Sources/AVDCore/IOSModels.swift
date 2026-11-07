@@ -44,15 +44,47 @@ public struct SimulatorRuntime: Identifiable, Equatable, Sendable {
     public let version: String
     public let buildVersion: String?
     public let isAvailable: Bool
+    /// 该 runtime 声明支持的机型；老版本 simctl 不输出此字段时为空数组。
+    public let supportedDeviceTypes: [SimulatorDeviceType]
 
     public var id: String { identifier }
     public var isIOS: Bool { identifier.hasPrefix(Self.iosPrefix) }
 
-    public init(identifier: String, version: String, buildVersion: String?, isAvailable: Bool) {
+    public init(
+        identifier: String,
+        version: String,
+        buildVersion: String?,
+        isAvailable: Bool,
+        supportedDeviceTypes: [SimulatorDeviceType] = []
+    ) {
         self.identifier = identifier
         self.version = version
         self.buildVersion = buildVersion
         self.isAvailable = isAvailable
+        self.supportedDeviceTypes = supportedDeviceTypes
+    }
+
+    /// 创建向导的机型过滤：优先取该 runtime 声明的 supportedDeviceTypes 与候选求交；
+    /// runtime 未声明（空数组，老版本 simctl）时回退全部候选。
+    public func filterDeviceTypes(_ candidates: [SimulatorDeviceType]) -> [SimulatorDeviceType] {
+        guard !supportedDeviceTypes.isEmpty else { return candidates }
+        let supported = Set(supportedDeviceTypes.map(\.identifier))
+        return candidates.filter { supported.contains($0.identifier) }
+    }
+}
+
+/// `simctl listapps <udid>` 输出中的一条已安装应用。
+public struct SimulatorApp: Identifiable, Equatable, Sendable {
+    public let bundleID: String
+    public let name: String
+    public let version: String?
+
+    public var id: String { bundleID }
+
+    public init(bundleID: String, name: String, version: String?) {
+        self.bundleID = bundleID
+        self.name = name
+        self.version = version
     }
 }
 
