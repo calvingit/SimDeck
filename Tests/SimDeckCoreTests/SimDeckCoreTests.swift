@@ -143,6 +143,17 @@ final class EmulatorArgumentsTests: XCTestCase {
         XCTAssertFalse(EmulatorController.wipeFileNames.contains("snapshots"))
         XCTAssertFalse(EmulatorController.wipeFileNames.contains("userdata.img"))
     }
+
+    func testWindowlessStart() {
+        XCTAssertEqual(
+            EmulatorController.launchArguments(avdName: "Pixel_7a", mode: .normal, windowless: true),
+            ["-avd", "Pixel_7a"] + EmulatorController.windowlessArguments
+        )
+        for flag in ["-no-window", "-no-audio", "-no-boot-anim", "-no-snapshot-save"] {
+            XCTAssertTrue(EmulatorController.windowlessArguments.contains(flag))
+        }
+        XCTAssertTrue(EmulatorController.windowlessArguments.contains("swiftshader_indirect"))
+    }
 }
 
 final class CommandRunnerTests: XCTestCase {

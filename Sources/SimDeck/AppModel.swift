@@ -87,6 +87,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var listError: String?
     @Published private(set) var runtimeError: String?
     @Published private(set) var busyAVDs: Set<String> = []
+    /// 由本 App 以无窗口模式启动的 AVD（会话内状态；app 退出时一并终止）。
+    @Published private(set) var windowlessAVDs: Set<String> = []
     @Published private(set) var pinnedAVDs: Set<String> = []
     @Published private(set) var simulators: [SimulatorDevice] = []
     @Published private(set) var busySimulators: Set<String> = []
@@ -261,6 +263,7 @@ final class AppModel: ObservableObject {
                 if !intentional, !self.busyHold.contains(avdName) {
                     self.busyAVDs.remove(avdName)
                 }
+                self.windowlessAVDs.remove(avdName)
                 if !intentional, status != 0 {
                     self.onError?(
                         AppLanguage.text("emulator.unexpectedExit", avdName),
@@ -432,6 +435,66 @@ final class AppModel: ObservableObject {
                     self.onError?(AppLanguage.text("operation.startFailed"), error.localizedDescription)
                 }
             }
+        }
+    }
+
+    /// 无窗口启动：不弹模拟器 GUI 窗口，预览与输入都走 adb，适合纯预览场景。
+    func startWindowless(_ avd: AVD) {
+        guard let emulator, !isStarting(avd.name), runningByAVD[avd.name] == nil else { return }
+        busyAVDs.insert(avd.name)
+        queue.async { [weak self] in
+            do {
+                try emulator.start(avdName: avd.name, mode: .normal, windowless: true)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.windowlessAVDs.insert(avd.name)
+                    self.refreshRunning()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.busyAVDs.remove(avd.name)
+                    self.onError?(AppLanguage.text("operation.startFailed"), error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    /// 无窗口实例切换为窗口模式：关闭当前实例后以窗口参数重启（quick boot 快）。
+    /// 模拟器无法给运行中的无头进程附加窗口，重启是唯一途径。
+    func openInWindow(_ avd: AVD) {
+        guard let emulator, !isStarting(avd.name), windowlessAVDs.contains(avd.name) else { return }
+        busyAVDs.insert(avd.name)
+        busyHold.insert(avd.name)
+        queue.async { [weak self] in
+            do {
+                try emulator.stop(serial: nil, avdName: avd.name)
+                try emulator.start(avdName: avd.name, mode: .normal)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.busyHold.remove(avd.name)
+                    if !emulator.isTracking(avdName: avd.name) {
+                        self.busyAVDs.remove(avd.name)
+                    }
+                    self.refreshRunning()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.busyHold.remove(avd.name)
+                    self.busyAVDs.remove(avd.name)
+                    self.onError?(AppLanguage.text("operation.openInWindowFailed"), error.localizedDescription)
+                    self.refreshRunning()
+                }
+            }
+        }
+    }
+
+    /// app 退出时终止由本 App 启动的无窗口实例：无窗口实例不可见，遗留在后台无法被用户感知。
+    func stopWindowlessInstances() {
+        guard let emulator else { return }
+        for avdName in windowlessAVDs {
+            emulator.interruptTracked(avdName: avdName)
         }
     }
 

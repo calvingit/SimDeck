@@ -115,6 +115,7 @@
 "details.serial" = "Serial: %@";
 "device.booted" = "Booted";
 "device.starting" = "Starting";
+"device.windowless" = "Headless";
 "details.status" = "Status: %@";
 "details.stopped" = "Status: Stopped";
 "details.snapshots" = "Snapshots (%@): ";
@@ -155,6 +156,7 @@
 "tools.avdmanagerUnconfigured" = "No usable avdmanager path is configured.";
 "operation.startFailed" = "Could Not Start Emulator";
 "operation.coldBootFailed" = "Cold Boot Failed";
+"operation.openInWindowFailed" = "Could Not Open in Window";
 "operation.avdNameMissing" = "The AVD name could not be found.";
 "operation.coldBootFailedNamed" = "Cold boot failed: %@";
 "operation.shutdownFailed" = "Shutdown Failed";
@@ -201,6 +203,8 @@
 "action.restart" = "Restart";
 "action.shutdown" = "Shut Down";
 "action.start" = "Start";
+"action.startWindowless" = "Preview Without Window";
+"action.openInWindow" = "Open in Window";
 "action.softReboot" = "Soft Reboot";
 "action.screenshot" = "Screenshot";
 "action.openStudio" = "Open Android Studio";

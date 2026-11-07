@@ -329,6 +329,28 @@ final class MockE2ETests: XCTestCase {
         XCTAssertTrue(captured.intentional)
     }
 
+    func testWindowlessStartRecordsFlagsAndClearsOnStop() throws {
+        let controller = makeController()
+        let expectation = expectation(description: "无窗口实例退出回调")
+        let captured = CapturedExit()
+        controller.onExit = { _, status, _, intentional in
+            captured.set(status: status, intentional: intentional, log: "")
+            expectation.fulfill()
+        }
+
+        try controller.start(avdName: avdName, mode: .normal, windowless: true)
+        XCTAssertNotNil(waitForPID(controller), "启动后未找到 mock emulator 进程")
+        XCTAssertTrue(waitForRecord(containing: "-no-window"))
+        XCTAssertTrue(waitForRecord(containing: "-no-snapshot-save"))
+        XCTAssertTrue(controller.isWindowless(avdName: avdName))
+
+        try controller.stop(serial: nil, avdName: avdName)
+        wait(for: [expectation], timeout: 5)
+
+        XCTAssertTrue(captured.intentional)
+        XCTAssertFalse(controller.isWindowless(avdName: avdName))
+    }
+
     func testSnapshotKOIsRejected() throws {
         let koAdb = root.appendingPathComponent("ko-adb")
         try writeScript(

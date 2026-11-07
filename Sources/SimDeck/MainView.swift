@@ -526,6 +526,10 @@ struct MainView: View {
                         Text(entry.metadata).foregroundStyle(.secondary)
                         Label(entry.statusTitle, systemImage: "circle.fill")
                             .foregroundStyle(entry.statusColor)
+                        if let avd = entry.avd, model.windowlessAVDs.contains(avd.name) {
+                            Label(AppLanguage.text("device.windowless"), systemImage: "eye")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .font(.caption)
                 }
@@ -583,6 +587,14 @@ struct MainView: View {
                     }
                 }
             } else if let device = entry.device {
+                if model.windowlessAVDs.contains(avd.name) {
+                    Button {
+                        actions.openInWindow(avd)
+                    } label: {
+                        Label(AppLanguage.text("action.openInWindow"), systemImage: "macwindow")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
                 Button(AppLanguage.text("action.restart")) { actions.softReboot(device, avd) }
                 Button(AppLanguage.text("action.shutdown")) { actions.shutdown(device, avd) }
             } else {
@@ -592,6 +604,12 @@ struct MainView: View {
                     Label(AppLanguage.text("action.start"), systemImage: "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
+                Button {
+                    actions.startWindowless(avd)
+                } label: {
+                    Label(AppLanguage.text("action.startWindowless"), systemImage: "eye")
+                }
+                .disabled(model.busyAVDs.contains(avd.name))
             }
         } else if let device = entry.device, device.isRealDevice {
             Button(AppLanguage.text("action.softReboot")) { actions.softReboot(device, nil) }

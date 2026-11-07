@@ -31,6 +31,8 @@ final class AppCoordinator {
     private func makeActions() -> PanelActions {
         PanelActions(
             start: { [weak self] avd in self?.model.start(avd) },
+            startWindowless: { [weak self] avd in self?.model.startWindowless(avd) },
+            openInWindow: { [weak self] avd in self?.model.openInWindow(avd) },
             shutdown: { [weak self] device, avd in self?.shutdown(device: device, avd: avd) },
             cancelStart: { [weak self] avd in
                 self?.model.shutdown(displayName: avd.name, serial: nil, avdName: avd.name)
@@ -533,7 +535,12 @@ final class AppCoordinator {
 
     private func copyLaunchCommand(_ avd: AVD) {
         let emulator = model.tools?.emulator?.path ?? "emulator"
-        copyToPasteboard("\(shellQuote(emulator)) -avd \(shellQuote(avd.name))")
+        var command = "\(shellQuote(emulator)) -avd \(shellQuote(avd.name))"
+        // 无窗口实例复制的命令与实际启动参数一致（无窗口实例只会以 .normal 启动）。
+        if model.windowlessAVDs.contains(avd.name) {
+            command += " " + EmulatorController.windowlessArguments.joined(separator: " ")
+        }
+        copyToPasteboard(command)
     }
 
     private func copyToPasteboard(_ text: String) {

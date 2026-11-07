@@ -13,6 +13,7 @@ A native macOS menu bar app for managing local Android Virtual Devices (AVDs) an
 - Devices grouped by running state, with Android version and API level.
 - Start, shut down, restart, cold boot, wipe data, delete, and rename AVDs.
 - Live preview with touch input and Back/Home/Recents/Power/Volume buttons.
+- Windowless preview: start an AVD without the emulator window and watch the screen in the app; switch to a regular window on demand.
 - Named snapshots: save, load, and delete.
 - Copy device details or launch commands; open the AVD folder or emulator log.
 - Developer tools: adb shell, logcat, screenshot, Android Studio.
@@ -78,6 +79,7 @@ On first launch, macOS may ask for access to the Android SDK or removable volume
 - Deleting an AVD and wiping its data both require confirmation.
 - Wiping data keeps the old snapshots as `snapshots.pre-wipe-<time>`.
 - The preview uses an ADB video stream and falls back to screenshots when the stream is unavailable.
+- Windowless AVD instances use software rendering (SwiftShader) and never save quick-boot snapshots; they are stopped when the app quits. Use "Open in Window" to switch such an instance to a regular emulator window.
 - Only named snapshots are listed; saving and loading require a running emulator.
 - Emulator logs are written to `~/Library/Logs/SimDeck/<AVD name>.log`.
 

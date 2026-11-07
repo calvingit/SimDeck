@@ -43,6 +43,7 @@ public final class EmulatorController: @unchecked Sendable {
     private var processes: [String: Process] = [:]
     private var logHandles: [String: FileHandle] = [:]
     private var intentionalStops: Set<String> = []
+    private var windowlessAVDs: Set<String> = []
     private let lock = NSLock()
 
     public init(tools: ToolPaths, logDirectory: URL) {
@@ -52,7 +53,18 @@ public final class EmulatorController: @unchecked Sendable {
 
     // MARK: - 启动
 
-    public static func launchArguments(avdName: String, mode: StartMode) -> [String] {
+    /// 无窗口(headless)模式参数。固定 SwiftShader 软渲染，且不落快照：
+    /// SwiftShader 会话保存的 quick boot 快照与窗口模式(host GPU)不兼容，
+    /// GPU 不一致时模拟器会拒绝加载甚至删除快照。
+    public static let windowlessArguments = [
+        "-no-window",
+        "-no-audio",
+        "-no-boot-anim",
+        "-gpu", "swiftshader_indirect",
+        "-no-snapshot-save"
+    ]
+
+    public static func launchArguments(avdName: String, mode: StartMode, windowless: Bool = false) -> [String] {
         var arguments = ["-avd", avdName]
         switch mode {
         case .normal:
@@ -60,10 +72,13 @@ public final class EmulatorController: @unchecked Sendable {
         case .coldBoot, .wipeData:
             arguments.append("-no-snapshot-load")
         }
+        if windowless {
+            arguments.append(contentsOf: windowlessArguments)
+        }
         return arguments
     }
 
-    public func start(avdName: String, mode: StartMode) throws {
+    public func start(avdName: String, mode: StartMode, windowless: Bool = false) throws {
         guard let emulator = tools.emulator else {
             throw EmulatorError.emulatorMissing
         }
@@ -87,7 +102,7 @@ public final class EmulatorController: @unchecked Sendable {
 
         let process = Process()
         process.executableURL = emulator
-        process.arguments = EmulatorController.launchArguments(avdName: avdName, mode: mode)
+        process.arguments = EmulatorController.launchArguments(avdName: avdName, mode: mode, windowless: windowless)
         process.environment = ToolEnvironment.make(tools: tools)
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = handle
@@ -102,6 +117,11 @@ public final class EmulatorController: @unchecked Sendable {
         processes[avdName] = process
         logHandles[avdName] = handle
         intentionalStops.remove(avdName)
+        if windowless {
+            windowlessAVDs.insert(avdName)
+        } else {
+            windowlessAVDs.remove(avdName)
+        }
         lock.unlock()
 
         do {
@@ -111,6 +131,7 @@ public final class EmulatorController: @unchecked Sendable {
             if processes[avdName] === process {
                 processes.removeValue(forKey: avdName)
                 logHandles.removeValue(forKey: avdName)
+                windowlessAVDs.remove(avdName)
             }
             lock.unlock()
             try? handle.close()
@@ -125,6 +146,7 @@ public final class EmulatorController: @unchecked Sendable {
         if isCurrentProcess {
             wasIntentional = intentionalStops.remove(avdName) != nil
             processes.removeValue(forKey: avdName)
+            windowlessAVDs.remove(avdName)
             if let handle = logHandles.removeValue(forKey: avdName) {
                 try? handle.close()
             }
@@ -288,6 +310,23 @@ public final class EmulatorController: @unchecked Sendable {
     /// 本 App 启动的进程是否仍在运行。
     public func isTracking(avdName: String) -> Bool {
         trackedRunningPID(avdName: avdName) != nil
+    }
+
+    /// 本 App 是否以无窗口模式启动了该 AVD。
+    public func isWindowless(avdName: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return windowlessAVDs.contains(avdName)
+    }
+
+    /// 对本 App 启动的实例发送 SIGTERM，不依赖 adb 控制台。
+    /// 供 app 退出时快速终止无窗口实例（无窗口模式不落快照，无需优雅停机）。
+    public func interruptTracked(avdName: String) {
+        lock.lock()
+        intentionalStops.insert(avdName)
+        let process = processes[avdName]
+        lock.unlock()
+        process?.interrupt()
     }
 
     private func serialPresent(_ serial: String) -> Bool {

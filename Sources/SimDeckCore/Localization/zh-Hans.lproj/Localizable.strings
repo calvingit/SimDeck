@@ -115,6 +115,7 @@
 "details.serial" = "序列号：%@";
 "device.booted" = "已启动";
 "device.starting" = "启动中";
+"device.windowless" = "无窗口";
 "details.status" = "状态：%@";
 "details.stopped" = "状态：未运行";
 "details.snapshots" = "快照（%@）：";
@@ -155,6 +156,7 @@
 "tools.avdmanagerUnconfigured" = "未配置可用的 avdmanager 路径。";
 "operation.startFailed" = "启动失败";
 "operation.coldBootFailed" = "冷启动失败";
+"operation.openInWindowFailed" = "打开窗口失败";
 "operation.avdNameMissing" = "找不到对应的 AVD 名称。";
 "operation.coldBootFailedNamed" = "冷启动失败：%@";
 "operation.shutdownFailed" = "关机失败";
@@ -201,6 +203,8 @@
 "action.restart" = "重启";
 "action.shutdown" = "关机";
 "action.start" = "启动";
+"action.startWindowless" = "无窗口预览";
+"action.openInWindow" = "在窗口中打开";
 "action.softReboot" = "软重启";
 "action.screenshot" = "截图";
 "action.openStudio" = "打开 Android Studio";

@@ -2,6 +2,8 @@ import SimDeckCore
 
 struct PanelActions {
     var start: (AVD) -> Void
+    var startWindowless: (AVD) -> Void
+    var openInWindow: (AVD) -> Void
     var shutdown: (RunningEmulator, AVD?) -> Void
     var cancelStart: (AVD) -> Void
     var softReboot: (RunningEmulator, AVD?) -> Void
