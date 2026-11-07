@@ -208,6 +208,7 @@
 "action.softReboot" = "Soft Reboot";
 "action.screenshot" = "Screenshot";
 "action.openStudio" = "Open Android Studio";
+"sidebar.toggle" = "Sidebar";
 "menu.developerTools" = "Developer Tools";
 "menu.saveSnapshot" = "Save Snapshot…";
 "menu.loadSnapshot" = "Load Snapshot…";
@@ -242,6 +243,7 @@
 "action.quit" = "Quit";
 "panel.emptyHelp" = "Check the avdmanager path or use avdmanager to create an AVD.";
 "menu.settings" = "Settings…";
+"menu.view" = "View";
 "device.running" = "Running";
 "device.connected" = "Connected";
 "device.notReady" = "Not ready";

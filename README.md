@@ -19,6 +19,7 @@ A native macOS menu bar app for managing local Android Virtual Devices (AVDs) an
 - Developer tools: adb shell, logcat, screenshot, Android Studio.
 - Create, rename, and move AVDs.
 - Pin the panel or frequently used AVDs; optional launch at login.
+- Main window device list collapses into a hideable sidebar (toolbar button or ⌘⌥S).
 
 ## iOS Simulator support
 

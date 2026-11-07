@@ -208,6 +208,7 @@
 "action.softReboot" = "软重启";
 "action.screenshot" = "截图";
 "action.openStudio" = "打开 Android Studio";
+"sidebar.toggle" = "侧边栏";
 "menu.developerTools" = "开发工具";
 "menu.saveSnapshot" = "保存快照…";
 "menu.loadSnapshot" = "加载快照…";
@@ -242,6 +243,7 @@
 "action.quit" = "退出";
 "panel.emptyHelp" = "检查 avdmanager 路径，或用 avdmanager 创建 AVD。";
 "menu.settings" = "设置…";
+"menu.view" = "显示";
 "device.running" = "运行中";
 "device.connected" = "已连接";
 "device.notReady" = "未就绪";

@@ -39,8 +39,10 @@ struct MainView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            leftList.frame(width: 224)
-            Divider()
+            if model.sidebarVisible {
+                leftList.frame(width: 224)
+                Divider()
+            }
             VStack(spacing: 0) {
                 if let entry = selected {
                     workspaceHeader(entry)
@@ -53,7 +55,7 @@ struct MainView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 740, minHeight: 480)
+        .frame(minWidth: model.sidebarVisible ? 740 : 520, minHeight: 480)
         .onAppear {
             updatePreview()
             model.setPreviewVisible(true)
@@ -547,6 +549,10 @@ struct MainView: View {
                         snapshotMenu(avd, entry.device)
                         managementMenu(avd, entry.device)
                     }
+                }
+                // 侧边栏隐藏时左侧列表的创建入口不可达，在 header 兜底。
+                if !model.sidebarVisible {
+                    createMenu
                 }
             }
             .fixedSize(horizontal: true, vertical: false)

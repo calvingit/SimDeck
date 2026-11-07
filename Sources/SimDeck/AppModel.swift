@@ -99,10 +99,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var shadowedUDIDs: Set<String> = []
 
     @Published var selectedDeviceID: DeviceEntry.ID?
+    /// 主窗口左侧设备列表显隐（持久化到 UserDefaults）。
+    @Published var sidebarVisible: Bool
     @Published private(set) var isRefreshing = false
 
     private var refreshGeneration = 0
     private static let pinnedKey = "pinnedAVDs"
+    private static let sidebarVisibleKey = "sidebarVisible"
 
     /// 冷启动/清数据期间保持 busy，直到新进程已启动，避免旧实例被轮询检测到时提前清除。
     private var busyHold: Set<String> = []
@@ -114,6 +117,7 @@ final class AppModel: ObservableObject {
     var cancellables = Set<AnyCancellable>()
 
     init() {
+        sidebarVisible = UserDefaults.standard.object(forKey: Self.sidebarVisibleKey) as? Bool ?? true
         loadPinnedAVDs()
         loadConfiguration()
         adbStreamer.$frame
@@ -158,6 +162,12 @@ final class AppModel: ObservableObject {
     private func loadPinnedAVDs() {
         let names = UserDefaults.standard.stringArray(forKey: Self.pinnedKey) ?? []
         pinnedAVDs = Set(names)
+    }
+
+    /// 切换主窗口侧边栏显隐并持久化。
+    func toggleSidebar() {
+        sidebarVisible.toggle()
+        UserDefaults.standard.set(sidebarVisible, forKey: Self.sidebarVisibleKey)
     }
 
     func start() {

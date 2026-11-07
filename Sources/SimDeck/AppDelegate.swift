@@ -1,4 +1,5 @@
 import AppKit
+import SimDeckCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel!
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Alerts.error(title, message)
         }
         model.start()
+        NSApp.mainMenu = makeMainMenu()
 
         if CommandLine.arguments.contains("--show-panel") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -52,6 +54,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// 最小主菜单：App 菜单（设置/退出）+ View 菜单（侧边栏 ⌘⌥S）。
+    /// accessory 应用激活主窗口时显示；⌘⌥S 只能靠菜单项提供（NSToolbarItem 快捷键固定 ⌘ 前缀）。
+    private func makeMainMenu() -> NSMenu {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu(title: "SimDeck")
+        let settingsItem = NSMenuItem(
+            title: AppLanguage.text("menu.settings"),
+            action: #selector(showSettingsFromMenu),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+        appMenu.addItem(.separator())
+        let quitItem = NSMenuItem(
+            title: AppLanguage.text("menu.quit"),
+            action: #selector(quitFromMenu),
+            keyEquivalent: "q"
+        )
+        quitItem.target = self
+        appMenu.addItem(quitItem)
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        let viewMenuItem = NSMenuItem()
+        let viewMenu = NSMenu(title: AppLanguage.text("menu.view"))
+        let sidebarItem = NSMenuItem(
+            title: AppLanguage.text("sidebar.toggle"),
+            action: #selector(toggleSidebarFromMenu),
+            keyEquivalent: "s"
+        )
+        sidebarItem.keyEquivalentModifierMask = [.command, .option]
+        sidebarItem.target = self
+        viewMenu.addItem(sidebarItem)
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
+
+        return mainMenu
+    }
+
+    @objc private func showSettingsFromMenu() {
+        statusController.closePanel()
+        showSettings()
+    }
+
+    @objc private func quitFromMenu() {
+        NSApp.terminate(nil)
+    }
+
+    @objc private func toggleSidebarFromMenu() {
+        model.toggleSidebar()
+        mainWindowController?.applySidebarMetrics()
     }
 
     private func showMain() {
