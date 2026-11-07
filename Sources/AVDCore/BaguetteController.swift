@@ -433,9 +433,10 @@ public final class BaguetteInputSession: @unchecked Sendable {
     }
 
     /// 关闭 stdin 让 baguette 干净退出（"stdin closed, input session ending"），
-    /// 2 秒后仍在则 SIGINT 兜底。
+    /// 2 秒后仍在则 SIGINT 兜底。对已意外退出的会话同样清空状态（udid 等），
+    /// 调用方（AppModel.updateInputSession）依赖 stop 后会话彻底复位。
     public func stop() {
-        guard let process else { return }
+        let liveProcess = process
         stdoutPipe?.fileHandleForReading.readabilityHandler = nil
         stderrPipe?.fileHandleForReading.readabilityHandler = nil
         try? stdinHandle?.close()
@@ -444,11 +445,12 @@ public final class BaguetteInputSession: @unchecked Sendable {
         self.stderrPipe = nil
         self.process = nil
         self.udid = nil
-        if process.isRunning {
-            process.interrupt()
+        guard let liveProcess else { return }
+        if liveProcess.isRunning {
+            liveProcess.interrupt()
             DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
-                if process.isRunning {
-                    kill(process.processIdentifier, SIGKILL)
+                if liveProcess.isRunning {
+                    kill(liveProcess.processIdentifier, SIGKILL)
                 }
             }
         }

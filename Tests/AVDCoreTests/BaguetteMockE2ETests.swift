@@ -225,6 +225,35 @@ final class BaguetteMockE2ETests: XCTestCase {
         XCTAssertEqual(ack?.error, "missing field: width")
     }
 
+    /// AppModel.handleInputSessionEnded 的重启守卫依赖的不变式：
+    /// 意外退出（handleProcessEnd）不清 udid，主动 stop 才清——否则重启工作项
+    /// 的 `baguetteInput.udid == udid` 永假，恢复路径失效。
+    func testInputSessionKeepsUDIDAfterUnexpectedExit() throws {
+        let script = root.appendingPathComponent("baguette-die")
+        try writeScript(at: script, contents: """
+        #!/bin/sh
+        printf '%s\\n' "$*" >> "\(recordFile.path)"
+        echo "input died" >&2
+        exit 3
+        """)
+
+        let session = BaguetteInputSession()
+        let ended = expectation(description: "意外退出回调")
+        var reason: String?
+        session.onEnded = {
+            reason = $0
+            ended.fulfill()
+        }
+
+        session.start(udid: Self.udid, baguette: script)
+        wait(for: [ended], timeout: 5)
+        XCTAssertNotNil(reason, "意外退出应带原因（stderr 行或退出码）")
+        XCTAssertFalse(session.isRunning)
+        XCTAssertEqual(session.udid, Self.udid, "意外退出不清 udid，重启守卫依赖它成立")
+        session.stop()
+        XCTAssertNil(session.udid, "主动 stop 清空 udid，onEnded 不再触发重启")
+    }
+
     func testInputSessionDetectsShadowAdviceOnce() throws {
         let script = root.appendingPathComponent("baguette-shadow")
         try writeScript(at: script, contents: """

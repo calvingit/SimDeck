@@ -846,7 +846,9 @@ final class AppModel: ObservableObject {
     }
 
     private func handleInputSessionEnded(reason: String?) {
-        guard let udid = baguetteInput.udid else { return } // 主动 stop 已清空 udid
+        // 意外退出时 BaguetteInputSession.handleProcessEnd 不清 udid，这里据此区分：
+        // 主动 stop（udid 已为 nil）无需处理；意外退出则按目标状态决定是否重启。
+        guard let udid = baguetteInput.udid else { return }
         shadowedUDIDs.remove(udid)
         let ran = inputStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         inputStartedAt = nil
@@ -855,7 +857,10 @@ final class AppModel: ObservableObject {
               let baguette = baguetteURL else { return }
         inputRestartWorkItem?.cancel()
         let restart = DispatchWorkItem { [weak self] in
-            guard let self, self.previewUDID == udid, self.baguetteInput.udid == nil else { return }
+            // 会话仍服务同一设备且未在运行才重启：期间若用户切走再切回，
+            // updateInputSession 已拉起新会话（isRunning），不得重复启动。
+            guard let self, self.previewUDID == udid,
+                  !self.baguetteInput.isRunning, self.baguetteInput.udid == udid else { return }
             self.startBaguetteInput(udid: udid, baguette: baguette)
         }
         inputRestartWorkItem = restart
