@@ -16,7 +16,6 @@ struct PanelActions {
     var create: () -> Void
     var refresh: () -> Void
     var settings: () -> Void
-    var togglePin: () -> Void
     var quit: () -> Void
     var copyName: (AVD) -> Void
     var copyPath: (AVD) -> Void

@@ -3,7 +3,6 @@ import SimDeckCore
 
 struct AVDPanelView: View {
     @ObservedObject var model: AppModel
-    @ObservedObject var pinned: PanelState
     let actions: PanelActions
 
     @State private var explicitPlatform: DeviceEntry.Platform?
@@ -44,13 +43,6 @@ struct AVDPanelView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(action: actions.togglePin) {
-                Image(systemName: pinned.isPinned ? "pin.fill" : "pin")
-            }
-            .buttonStyle(.borderless)
-            .help(pinned.isPinned ? AppLanguage.text("panel.unpin") : AppLanguage.text("panel.pin"))
-            .accessibilityLabel(pinned.isPinned ? AppLanguage.text("panel.unpin") : AppLanguage.text("panel.pin"))
-
             Button(action: actions.refresh) {
                 if model.isRefreshing {
                     ProgressView().controlSize(.small)
@@ -107,7 +99,7 @@ struct AVDPanelView: View {
                     }
                     .padding(.bottom, 4)
                 }
-                DevicePlatformPicker(entries: model.deviceEntries, selection: platformBinding)
+                DevicePlatformPicker(entries: model.deviceEntries, selection: platformBinding, showsRunningCount: true)
                     .padding(.bottom, 2)
                 let entries = model.deviceEntries.filter { $0.platform == activePlatform }
                 DeviceGroups(entries: entries) { entry in
@@ -187,10 +179,10 @@ struct AVDPanelView: View {
         let entries = model.deviceEntries
         let android = entries.filter { $0.platform == .android }
         let real = android.filter { $0.device?.isRealDevice == true }.count
-        let avds = android.count - real
-        let running = entries.filter { $0.status == .running }.count
+        // tab 已显示各平台运行中数量，副标题只列平台总数。
+        let emulators = android.count - real
         let iosCount = entries.filter { $0.platform == .iosSimulator }.count
-        return AppLanguage.text("panel.deviceCounts", String(running), String(avds))
+        return AppLanguage.text("panel.deviceCounts", String(emulators))
             + (real > 0 ? AppLanguage.text("panel.physicalCount", String(real)) : "")
             + (iosCount > 0 ? AppLanguage.text("panel.iosCount", String(iosCount)) : "")
     }

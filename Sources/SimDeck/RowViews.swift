@@ -105,11 +105,15 @@ struct DeviceEntry: Identifiable {
                 .filter { !$0.isEmpty }
                 .joined(separator: " · ")
         case .android:
-            let type = device?.isRealDevice == true ? AppLanguage.text("device.physical") : "AVD"
             let version = avd?.androidVersion ?? props?.androidVersion
             let api = avd?.apiLevel ?? props?.apiLevel
-            return ([type] + [version.map { "Android \($0)" }, api.map { "API \($0)" }]
-                .compactMap { $0 }).joined(separator: " · ")
+            var parts: [String] = []
+            if device?.isRealDevice == true {
+                parts.append(AppLanguage.text("device.physical"))
+            }
+            parts.append(contentsOf: [version.map { "Android \($0)" }, api.map { "API \($0)" }]
+                .compactMap { $0 })
+            return parts.joined(separator: " · ")
         }
     }
 
@@ -221,6 +225,8 @@ extension DeviceEntry.Platform {
 struct DevicePlatformPicker: View {
     let entries: [DeviceEntry]
     @Binding var selection: DeviceEntry.Platform
+    /// true 时 tab 显示运行中设备数（菜单栏面板语义），否则显示设备总数（主窗口）。
+    var showsRunningCount = false
 
     var body: some View {
         Picker(AppLanguage.text("tab.platform"), selection: $selection) {
@@ -236,6 +242,12 @@ struct DevicePlatformPicker: View {
         .accessibilityLabel(AppLanguage.text("tab.platform"))
     }
 
-    private var androidCount: Int { entries.filter { $0.platform == .android }.count }
-    private var iosCount: Int { entries.filter { $0.platform == .iosSimulator }.count }
+    private var androidCount: Int { count(for: .android) }
+    private var iosCount: Int { count(for: .iosSimulator) }
+
+    private func count(for platform: DeviceEntry.Platform) -> Int {
+        let platformEntries = entries.filter { $0.platform == platform }
+        guard showsRunningCount else { return platformEntries.count }
+        return platformEntries.filter { $0.status == .running }.count
+    }
 }

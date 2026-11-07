@@ -5,7 +5,6 @@ final class AppCoordinator {
     private let model: AppModel
     private let showSettings: () -> Void
     private let quitApp: () -> Void
-    private let togglePanelPin: () -> Void
     private let openMain: () -> Void
 
     lazy var actions: PanelActions = makeActions()
@@ -18,13 +17,11 @@ final class AppCoordinator {
         model: AppModel,
         showSettings: @escaping () -> Void,
         quit: @escaping () -> Void,
-        togglePanelPin: @escaping () -> Void,
         openMain: @escaping () -> Void
     ) {
         self.model = model
         self.showSettings = showSettings
         self.quitApp = quit
-        self.togglePanelPin = togglePanelPin
         self.openMain = openMain
     }
 
@@ -55,7 +52,6 @@ final class AppCoordinator {
             create: { [weak self] in self?.promptCreateAVD() },
             refresh: { [weak self] in self?.model.refreshAll() },
             settings: { [weak self] in self?.showSettings() },
-            togglePin: { [weak self] in self?.togglePanelPin() },
             quit: { [weak self] in self?.quitApp() },
             copyName: { [weak self] avd in self?.copyToPasteboard(avd.name) },
             copyPath: { [weak self] avd in self?.copyToPasteboard(avd.path) },

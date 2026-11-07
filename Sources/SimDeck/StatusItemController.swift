@@ -3,19 +3,12 @@ import Combine
 import SwiftUI
 import SimDeckCore
 
-/// 面板常驻置顶状态，供面板内的开关按钮反映。
-final class PanelState: ObservableObject {
-    @Published var isPinned = false
-}
-
 final class StatusItemController: NSObject, NSPopoverDelegate {
     private let model: AppModel
     private let statusItem: NSStatusItem
     private let popover: NSPopover
     private let contextMenu = NSMenu()
     private let quitAction: () -> Void
-    let panelState = PanelState()
-    private var isPinned = UserDefaults.standard.bool(forKey: "panelPinned")
     private var cancellables = Set<AnyCancellable>()
     private var escapeMonitor: Any?
     private var localClickMonitor: Any?
@@ -31,7 +24,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         super.init()
 
         if let button = statusItem.button {
-            let image = NSImage(systemSymbolName: "iphone", accessibilityDescription: "AVD")
+            let image = NSImage(systemSymbolName: "iphone", accessibilityDescription: "SimDeck")
             image?.isTemplate = true
             button.image = image
             button.imagePosition = .imageLeading
@@ -51,7 +44,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         contextMenu.addItem(quitItem)
 
         popover.contentViewController = NSHostingController(
-            rootView: AVDPanelView(model: model, pinned: panelState, actions: actions)
+            rootView: AVDPanelView(model: model, actions: actions)
         )
         popover.contentSize = Self.popoverSize
         popover.delegate = self
@@ -61,20 +54,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             .sink { [weak self] _ in self?.updateBadge() }
             .store(in: &cancellables)
 
-        panelState.isPinned = isPinned
         updateBadge()
     }
 
     deinit {
         stopMonitors()
-    }
-
-    /// 面板常驻置顶开关：开启后不随点击面板外/切走应用自动隐藏。
-    func togglePin() {
-        isPinned.toggle()
-        UserDefaults.standard.set(isPinned, forKey: "panelPinned")
-        popover.behavior = isPinned ? .applicationDefined : .transient
-        panelState.isPinned = isPinned
     }
 
     @objc private func handleStatusItemClick(_ button: NSStatusBarButton) {
@@ -99,7 +83,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     func showPanel() {
         guard !popover.isShown, let button = statusItem.button else { return }
 
-        popover.behavior = isPinned ? .applicationDefined : .transient
         // 菜单栏应用默认不是 active 应用。先激活，popover 窗口才能成为 key window，
         // 系统才会按 .transient 语义在点击外部时关闭面板。
         NSApp.activate()
@@ -148,7 +131,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
                 matching: [.leftMouseDown, .rightMouseDown]
             ) { [weak self] _ in
-                self?.closePanelIfUnpinned()
+                self?.closePanel()
             }
         }
     }
@@ -171,7 +154,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// 点击本应用的其他窗口（主窗口、设置窗口、对话框）时关闭面板。
     /// 面板内部和状态栏按钮上的点击排除在外。
     private func handleLocalClick(_ event: NSEvent) {
-        guard !isPinned, popover.isShown else { return }
+        guard popover.isShown else { return }
         if let panelWindow = popover.contentViewController?.view.window,
            event.window === panelWindow {
             return
@@ -187,11 +170,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     /// 点击其他应用或桌面时关闭面板。全局监听收不到本应用的事件，
     /// 本应用内的点击由 `handleLocalClick` 处理。
-    private func closePanelIfUnpinned() {
-        guard !isPinned, popover.isShown else { return }
-        closePanel()
-    }
-
     private func updateBadge() {
         statusItem.button?.title = model.activeCount > 0 ? "\(model.activeCount)" : ""
     }

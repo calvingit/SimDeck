@@ -20,9 +20,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.showSettings()
             },
             quit: { NSApp.terminate(nil) },
-            togglePanelPin: { [weak self] in
-                self?.statusController?.togglePin()
-            },
             openMain: { [weak self] in
                 self?.statusController?.closePanel()
                 self?.showMain()

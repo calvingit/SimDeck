@@ -1699,7 +1699,7 @@ final class AppModel: ObservableObject {
                 lines.append("adb: \(resolved.adb?.path ?? AppLanguage.text("settings.tools.notFound"))")
                 lines.append("JAVA_HOME: \(resolved.javaHome?.path ?? AppLanguage.text("settings.tools.javaMissing"))")
                 if !avds.isEmpty {
-                    lines.append("AVD: " + avds.map(\.name).joined(separator: ", "))
+                    lines.append(avds.map(\.name).joined(separator: ", "))
                 }
                 let message = lines.joined(separator: "\n")
                 DispatchQueue.main.async { completion(message) }
