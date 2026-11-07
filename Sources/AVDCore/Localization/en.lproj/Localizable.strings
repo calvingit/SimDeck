@@ -279,11 +279,13 @@
 "ios.menu.launchApp" = "Launch App…";
 "ios.menu.terminateApp" = "Terminate App…";
 "ios.menu.openURL" = "Open URL…";
+"ios.menu.uninstallApp" = "Uninstall App…";
 "ios.menu.logs" = "Simulator Logs…";
 "ios.app.installFailed" = "Could not install on %@";
 "ios.app.launchFailed" = "Could not launch %@";
 "ios.app.terminateFailed" = "Could not terminate %@";
 "ios.app.openURLFailed" = "Could not open %@";
+"ios.app.uninstallFailed" = "Could not uninstall %@";
 "ios.app.installChoose" = "Install";
 "ios.app.installMessage" = "Choose the .app bundle to install on the simulator.";
 "ios.app.notAppBundle" = "Not an App Bundle";
@@ -294,6 +296,11 @@
 "ios.app.terminatePrompt" = "Enter the bundle id of the app to terminate.";
 "ios.app.openURLTitle" = "Open URL";
 "ios.app.openURLPrompt" = "Enter the URL to open (e.g. myapp://path).";
+"ios.app.uninstallAction" = "Uninstall";
+"ios.app.uninstallTitle" = "Uninstall App";
+"ios.app.uninstallPrompt" = "Enter the bundle id of the app to uninstall.";
+"ios.app.uninstallConfirmTitle" = "Uninstall App";
+"ios.app.uninstallConfirm" = "Uninstall %1$@ from %2$@? Its data will be removed.";
 "ios.erase.action" = "Erase";
 "ios.erase.confirmTitle" = "Erase “%@”?";
 "ios.erase.confirmMessage" = "All content and settings on this simulator will be erased. If it is running, it will shut down first. This action cannot be undone.\n\nName: %@\nUDID: %@";

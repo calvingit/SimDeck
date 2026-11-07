@@ -16,6 +16,7 @@
 - 命名快照（save/load RAM 状态）——`simctl` 无此能力；后续可做"关机克隆模板"。
 - iOS 真机（`devicectl` 配对是另一套体系）、watchOS/tvOS/visionOS。
 - 移动设备位置、AVD 式 config 编辑。
+- 横屏下的触摸坐标转换（首期按竖屏实现并验证；横屏下输入可能错位，待真机验证后单独处理）。
 
 ## 1. 已确认的平台事实（2026-11-06 实测，macOS 26.6.2 / Xcode 27.0）
 
@@ -122,7 +123,7 @@ public enum IOSGesture: Encodable, Sendable {
   └─ 仅基础档   → .iosPolling（simctl io screenshot <tmp>.png，1.5s 间隔）
 ```
 
-触摸坐标映射：预览帧尺寸(px) 与 describe-ui points 求比例；横屏输入转换放 Phase 4。
+触摸坐标映射：预览帧尺寸(px) 与 describe-ui points 求比例；横屏输入转换未实现（见 §0 非目标），横屏下触摸可能错位。
 
 ## 5. 验证体系
 

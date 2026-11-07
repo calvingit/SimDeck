@@ -48,5 +48,6 @@ struct PanelActions {
     var launchAppSimulator: (SimulatorDevice) -> Void
     var terminateAppSimulator: (SimulatorDevice) -> Void
     var openURLSimulator: (SimulatorDevice) -> Void
+    var uninstallAppSimulator: (SimulatorDevice) -> Void
     var openSimulatorLog: (SimulatorDevice) -> Void
 }

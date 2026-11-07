@@ -39,7 +39,13 @@
    ```
 
 3. 解压，把 `Baguette` 与 `Baguette_Baguette.bundle` 放入 `Vendor/baguette/`。
-4. 运行 `./scripts/build-app.sh`；二进制与资源包会拷贝到 `AVDMenuBar.app/Contents/Resources/Helpers/` 并 ad-hoc 签名。
+4. 记录二进制校验和，供构建脚本内嵌前校验：
+
+   ```bash
+   cd Vendor/baguette && shasum -a 256 Baguette > checksums.txt
+   ```
+
+5. 运行 `./scripts/build-app.sh`；二进制与资源包会拷贝到 `AVDMenuBar.app/Contents/Resources/Helpers/` 并 ad-hoc 签名。`checksums.txt` 缺失或不匹配时构建会直接失败。
 
 缺少 `Vendor/baguette/` 时构建打印提示并跳过，产物只含基础档。baguette 二进制不入库；也可以在「设置 → iOS 模拟器」中把 baguette 指向外部副本。
 

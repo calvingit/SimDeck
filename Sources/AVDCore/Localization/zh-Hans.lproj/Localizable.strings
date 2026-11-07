@@ -279,11 +279,13 @@
 "ios.menu.launchApp" = "启动 App…";
 "ios.menu.terminateApp" = "终止 App…";
 "ios.menu.openURL" = "打开 URL…";
+"ios.menu.uninstallApp" = "卸载 App…";
 "ios.menu.logs" = "模拟器日志…";
 "ios.app.installFailed" = "安装 %@ 失败";
 "ios.app.launchFailed" = "启动 %@ 失败";
 "ios.app.terminateFailed" = "终止 %@ 失败";
 "ios.app.openURLFailed" = "打开 %@ 失败";
+"ios.app.uninstallFailed" = "卸载 %@ 失败";
 "ios.app.installChoose" = "安装";
 "ios.app.installMessage" = "选择要安装到模拟器的 .app 包。";
 "ios.app.notAppBundle" = "不是 .app 包";
@@ -294,6 +296,11 @@
 "ios.app.terminatePrompt" = "输入要终止的 App 的 bundle id。";
 "ios.app.openURLTitle" = "打开 URL";
 "ios.app.openURLPrompt" = "输入要打开的 URL（如 myapp://path）。";
+"ios.app.uninstallAction" = "卸载";
+"ios.app.uninstallTitle" = "卸载 App";
+"ios.app.uninstallPrompt" = "输入要卸载的 App 的 bundle id。";
+"ios.app.uninstallConfirmTitle" = "卸载 App";
+"ios.app.uninstallConfirm" = "要从 %2$@ 卸载 %1$@ 吗？其数据将被移除。";
 "ios.erase.action" = "抹掉";
 "ios.erase.confirmTitle" = "抹掉 “%@” 的所有内容？";
 "ios.erase.confirmMessage" = "将抹掉该模拟器的所有内容和设置；若正在运行，会先关机。此操作不可恢复。\n\n名称：%@\nUDID：%@";

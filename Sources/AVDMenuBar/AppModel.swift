@@ -827,6 +827,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func uninstallApp(on device: SimulatorDevice, bundleID: String) {
+        guard let simctl else { return }
+        queue.async { [weak self] in
+            do {
+                try simctl.uninstallApp(udid: device.udid, bundleID: bundleID)
+            } catch {
+                self?.reportOperationError(AppLanguage.text("ios.app.uninstallFailed", bundleID), error)
+            }
+        }
+    }
+
     func openURL(on device: SimulatorDevice, url: String) {
         guard let simctl else { return }
         queue.async { [weak self] in

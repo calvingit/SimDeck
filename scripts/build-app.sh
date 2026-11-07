@@ -31,13 +31,23 @@ else
 fi
 
 if [ "$EMBED_BAGUETTE" = "1" ]; then
+  # 设计决策 3：内嵌前必须通过 checksum 校验，防止损坏或被替换的二进制静默进入产物。
+  # checksums.txt 由用户按 README 步骤生成（shasum -a 256 格式，覆盖 Baguette 二进制）。
+  if [ ! -f "$VENDOR_DIR/checksums.txt" ]; then
+    echo "错误：Vendor/baguette/ 缺少 checksums.txt，拒绝内嵌未校验的 baguette。生成步骤见 README「iOS 模拟器支持」。" >&2
+    exit 1
+  fi
+  if ! (cd "$VENDOR_DIR" && shasum -a 256 -c checksums.txt) >/dev/null 2>&1; then
+    echo "错误：Vendor/baguette/checksums.txt 校验未通过，拒绝内嵌 baguette。请按 README 重新获取并生成。" >&2
+    exit 1
+  fi
   mkdir -p "$APP_DIR/Contents/Resources/Helpers"
   cp "$VENDOR_DIR/Baguette" "$APP_DIR/Contents/Resources/Helpers/Baguette"
   cp -R "$VENDOR_DIR/Baguette_Baguette.bundle" "$APP_DIR/Contents/Resources/Helpers/"
   # 嵌套代码先签名，再签外层 bundle 封印其签名。
   codesign --force --sign - "$APP_DIR/Contents/Resources/Helpers/Baguette_Baguette.bundle"
   codesign --force --sign - "$APP_DIR/Contents/Resources/Helpers/Baguette"
-  echo "已内嵌 baguette：$APP_DIR/Contents/Resources/Helpers/"
+  echo "已内嵌 baguette（checksum 已校验）：$APP_DIR/Contents/Resources/Helpers/"
 fi
 
 codesign --force --sign - "$APP_DIR"

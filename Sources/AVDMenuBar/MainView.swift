@@ -581,6 +581,8 @@ struct MainView: View {
                 .disabled(!simulator.isBooted)
             Button(AppLanguage.text("ios.menu.openURL")) { actions.openURLSimulator(simulator) }
                 .disabled(!simulator.isBooted)
+            Button(AppLanguage.text("ios.menu.uninstallApp"), role: .destructive) { actions.uninstallAppSimulator(simulator) }
+                .disabled(!simulator.isBooted)
             Divider()
             // 日志走 `simctl spawn`，要求设备已启动。
             Button(AppLanguage.text("ios.menu.logs")) { actions.openSimulatorLog(simulator) }

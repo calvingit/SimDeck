@@ -117,8 +117,24 @@ final class AppCoordinator {
                     message: AppLanguage.text("ios.app.openURLPrompt")
                 ) { self?.model.openURL(on: device, url: $0) }
             },
+            uninstallAppSimulator: { [weak self] device in
+                self?.promptSimulatorBundleID(
+                    title: AppLanguage.text("ios.app.uninstallTitle"),
+                    message: AppLanguage.text("ios.app.uninstallPrompt")
+                ) { self?.confirmUninstallSimulatorApp(device, bundleID: $0) }
+            },
             openSimulatorLog: { [weak self] device in self?.openSimulatorLog(device) }
         )
+    }
+
+    /// 卸载 App：bundle id 输入后二次确认（数据一并移除，不可恢复）。
+    private func confirmUninstallSimulatorApp(_ device: SimulatorDevice, bundleID: String) {
+        guard Alerts.confirmDestructive(
+            title: AppLanguage.text("ios.app.uninstallConfirmTitle"),
+            message: AppLanguage.text("ios.app.uninstallConfirm", bundleID, device.name),
+            actionTitle: AppLanguage.text("ios.app.uninstallAction")
+        ) else { return }
+        model.uninstallApp(on: device, bundleID: bundleID)
     }
 
     // MARK: - 生命周期

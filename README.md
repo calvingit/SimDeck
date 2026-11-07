@@ -39,7 +39,13 @@ With full Xcode (or the Command Line Tools) installed, the app also manages iOS 
    ```
 
 3. Extract the archive and put `Baguette` and `Baguette_Baguette.bundle` into `Vendor/baguette/`.
-4. Run `./scripts/build-app.sh`; the binary and its bundle are copied to `AVDMenuBar.app/Contents/Resources/Helpers/` and ad-hoc signed.
+4. Record the binary checksum so the build script can verify it before embedding:
+
+   ```bash
+   cd Vendor/baguette && shasum -a 256 Baguette > checksums.txt
+   ```
+
+5. Run `./scripts/build-app.sh`; the binary and its bundle are copied to `AVDMenuBar.app/Contents/Resources/Helpers/` and ad-hoc signed. The build fails if `checksums.txt` is missing or does not match.
 
 Without `Vendor/baguette/` the build prints a notice and ships the basic tier only. The baguette binary is not committed to this repository. You can also point the app at an external copy in Settings → iOS Simulators.
 
