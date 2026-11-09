@@ -27,6 +27,7 @@
 
 - **基础档**（有 Xcode 即可用）：列表、启动、关机、重启、创建（机型随所选 iOS 版本过滤）、重命名、删除、抹掉（均有确认弹窗）；截图轮询预览；截图保存；App 管理（安装 .app 包、按 bundle id 启动/终止、打开 URL）；在终端打开模拟器日志（`xcrun simctl spawn <udid> log stream`）。
 - **增强档**（需内嵌 baguette；macOS 15+ 且 Apple Silicon）：实时 H.264 预览、触摸/滑动/双指手势、Home/Lock/音量按键；串流不可用时自动降级为截图轮询。
+- 从应用内启动模拟器会同时呈现设备界面：主窗口自动打开并选中该设备（应用内预览），并唤起 Device Hub（`com.apple.dt.Devices`，旧版 Xcode 为 Simulator.app）提供原生界面。Device Hub 不会为 `simctl` 启动的设备自动连屏，点一次它的 Start 按钮即可连接显示。
 
 ### 内嵌 baguette（可选）
 

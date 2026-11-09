@@ -29,6 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onError = { title, message in
             Alerts.error(title, message)
         }
+        model.onSimulatorBooted = { [weak self] device in
+            self?.coordinator.revealBootedSimulator(device)
+        }
         model.start()
         NSApp.mainMenu = makeMainMenu()
 

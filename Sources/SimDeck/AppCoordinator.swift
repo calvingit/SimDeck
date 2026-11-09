@@ -689,6 +689,39 @@ final class AppCoordinator {
         }
     }
 
+    /// iOS 模拟器启动后呈现设备 UI：主窗口选中该设备走应用内预览，
+    /// 同时打开 Device Hub 的原生界面（旧工具链为 Simulator.app，打开时会自动为已
+    /// boot 的设备弹窗口）。Device Hub 对 simctl 启动的设备不自动连屏，需用户点一次 Start。
+    func revealBootedSimulator(_ device: SimulatorDevice) {
+        model.selectedDeviceID = .iosSimulator(device.udid)
+        NSApp.activate()
+        openMain()
+        openSimulatorUIApp()
+    }
+
+    private func openSimulatorUIApp() {
+        let bundleIDs = ["com.apple.dt.Devices", "com.apple.iphonesimulator"]
+        for bundleID in bundleIDs {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                NSWorkspace.shared.openApplication(
+                    at: url,
+                    configuration: NSWorkspace.OpenConfiguration()
+                ) { _, error in
+                    if let error {
+                        DispatchQueue.main.async {
+                            Alerts.error(AppLanguage.text("deviceHub.openFailed"), error.localizedDescription)
+                        }
+                    }
+                }
+                return
+            }
+        }
+        Alerts.error(
+            AppLanguage.text("deviceHub.notFound"),
+            AppLanguage.text("deviceHub.bundleNotFound")
+        )
+    }
+
     // MARK: - 输入对话框
 
     private func promptText(title: String, message: String, defaultValue: String) -> String? {

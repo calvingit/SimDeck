@@ -146,6 +146,9 @@
 "studio.openFailed" = "无法打开 Android Studio";
 "studio.notFound" = "未找到 Android Studio";
 "studio.bundleNotFound" = "系统中没有检测到 com.google.android.studio。";
+"deviceHub.openFailed" = "无法打开 Device Hub";
+"deviceHub.notFound" = "未找到模拟器界面应用";
+"deviceHub.bundleNotFound" = "系统中没有检测到 Device Hub（com.apple.dt.Devices）或 Simulator。模拟器已在运行，请手动打开它的界面。";
 "action.confirm" = "确定";
 "prompt.inputRequired" = "输入不能为空";
 "prompt.enterValue" = "请重新操作并输入内容。";

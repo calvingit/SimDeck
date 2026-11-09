@@ -146,6 +146,9 @@
 "studio.openFailed" = "Could Not Open Android Studio";
 "studio.notFound" = "Android Studio Not Found";
 "studio.bundleNotFound" = "The app com.google.android.studio was not found.";
+"deviceHub.openFailed" = "Could Not Open Device Hub";
+"deviceHub.notFound" = "Simulator UI App Not Found";
+"deviceHub.bundleNotFound" = "Neither Device Hub (com.apple.dt.Devices) nor Simulator was found. The simulator is running; open its UI manually.";
 "action.confirm" = "OK";
 "prompt.inputRequired" = "Input Required";
 "prompt.enterValue" = "Try again and enter a value.";

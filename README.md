@@ -27,6 +27,7 @@ With full Xcode (or the Command Line Tools) installed, the app also manages iOS 
 
 - **Basic tier** (always available with Xcode): list, boot, shut down, restart, create (device types filtered by the selected iOS version), rename, delete, and erase with confirmation dialogs; screenshot polling preview; screenshots; app management (install a .app bundle, launch/terminate by bundle id, open URL); and simulator logs in a terminal (`xcrun simctl spawn <udid> log stream`).
 - **Enhanced tier** (requires bundled baguette; macOS 15+ on Apple Silicon): live H.264 preview, touch/swipe/two-finger gestures, and Home/Lock/Volume keys. When the stream is unavailable, the preview automatically falls back to screenshot polling.
+- Booting from the app shows the device UI: the main window opens with the simulator selected for the in-app preview, and Device Hub (`com.apple.dt.Devices`, or Simulator.app on older Xcode) is brought up for the native interface. Device Hub does not attach the screen for devices booted via `simctl`; click its Start button once to connect the display.
 
 ### Bundling baguette (optional)
 

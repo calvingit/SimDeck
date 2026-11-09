@@ -111,6 +111,8 @@ final class AppModel: ObservableObject {
     private var busyHold: Set<String> = []
 
     var onError: ((String, String) -> Void)?
+    /// iOS 模拟器由本 App 启动成功后回调（主线程）。用于呈现设备 UI（主窗口预览 + Device Hub）。
+    var onSimulatorBooted: ((SimulatorDevice) -> Void)?
 
     private var refreshTimer: Timer?
     private var simulatorRefreshTimer: Timer?
@@ -688,6 +690,7 @@ final class AppModel: ObservableObject {
                         self.scheduleAutoHeal(udid: device.udid, baguette: baguette)
                     }
                     self.refreshSimulators()
+                    self.onSimulatorBooted?(device)
                 }
             } catch {
                 DispatchQueue.main.async { [weak self] in
